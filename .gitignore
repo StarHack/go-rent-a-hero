@@ -1,0 +1,14 @@
+*.sh
+libSDL3.dylib
+_game
+internal/current.zip
+.DS_Store
+data
+dist
+recording.mp4
+recording.png
+rah
+savegames
+SaveGame01.rah
+introdebug
+package.txt

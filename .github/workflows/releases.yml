@@ -1,0 +1,187 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  SDL_REF: release-3.4.16
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15-intel
+            goos: darwin
+            goarch: amd64
+            cmake_arch: x86_64
+            artifact: rah-darwin-amd64
+            archive: rah-darwin-amd64.tar.gz
+
+          - os: macos-15
+            goos: darwin
+            goarch: arm64
+            cmake_arch: arm64
+            artifact: rah-darwin-arm64
+            archive: rah-darwin-arm64.tar.gz
+
+          - os: windows-2025
+            goos: windows
+            goarch: amd64
+            artifact: rah-windows-amd64
+            archive: rah-windows-amd64.zip
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Clone SDL
+        shell: bash
+        run: |
+          git clone \
+            --depth 1 \
+            --branch "$SDL_REF" \
+            https://github.com/libsdl-org/SDL.git \
+            SDL
+
+      - name: Build SDL on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cmake \
+            -S SDL \
+            -B SDL/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_arch }}" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DSDL_SHARED=ON \
+            -DSDL_STATIC=OFF \
+            -DSDL_TESTS=OFF
+
+          cmake \
+            --build SDL/build \
+            --config Release \
+            --parallel
+
+          cmake \
+            --install SDL/build \
+            --config Release \
+            --prefix "$PWD/SDL/install"
+
+      - name: Build SDL on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake `
+            -S SDL `
+            -B SDL/build `
+            -A x64 `
+            -DSDL_SHARED=ON `
+            -DSDL_STATIC=OFF `
+            -DSDL_TESTS=OFF
+
+          cmake `
+            --build SDL/build `
+            --config Release `
+            --parallel
+
+          cmake `
+            --install SDL/build `
+            --config Release `
+            --prefix "$PWD/SDL/install"
+
+      - name: Build Go tools
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p dist
+
+          if [ "$GOOS" = "windows" ]; then
+            go build -trimpath -ldflags="-s -w" -o dist/rah.exe ./cmd/rah
+            go build -trimpath -ldflags="-s -w" -o dist/rahinstall.exe ./cmd/rahinstall
+          else
+            go build -trimpath -ldflags="-s -w" -o dist/rah ./cmd/rah
+            go build -trimpath -ldflags="-s -w" -o dist/rahinstall ./cmd/rahinstall
+          fi
+
+      - name: Add config
+        shell: bash
+        run: |
+          cp config.ini dist/config.ini
+
+      - name: Copy SDL on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cp SDL/install/lib/libSDL3.dylib dist/libSDL3.dylib
+
+      - name: Copy SDL on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Copy-Item SDL/install/bin/SDL3.dll dist/SDL3.dll
+
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          tar \
+            -C dist \
+            -czf "${{ matrix.archive }}" \
+            rah \
+            rahinstall \
+            libSDL3.dylib \
+            config.ini
+
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path dist/rah.exe,dist/rahinstall.exe,dist/SDL3.dll,dist/config.ini `
+            -DestinationPath "${{ matrix.archive }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.archive }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            artifacts/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --generate-notes \
+            --title "${GITHUB_REF_NAME}"
