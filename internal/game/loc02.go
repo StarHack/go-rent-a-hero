@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 
 	"github.com/wok/rent-a-hero/internal/engine"
+	"github.com/wok/rent-a-hero/internal/video"
 )
 
 const loc02GuestStoryOffset = 0x3ea4
@@ -34,7 +35,19 @@ func (LOC02Controller) Enter(ctx *Context, scene string, from string) engine.Tas
 	default:
 		return nil
 	}
+	loc02DisableVideoTransparency(ctx, scene)
 	return engine.Sequence(tasks...)
+}
+
+func loc02DisableVideoTransparency(ctx *Context, scene string) {
+	if scene != "S2013" && scene != "S0015" {
+		return
+	}
+	for _, layer := range ctx.session.scene.Layers {
+		if _, ok := layer.Source.(*video.Source); ok {
+			layer.ColorKeyed = false
+		}
+	}
 }
 
 func (LOC02Controller) Exit(ctx *Context, scene string, to string) engine.Task { return nil }
