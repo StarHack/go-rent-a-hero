@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/wok/rent-a-hero/internal/engine"
+	"github.com/wok/rent-a-hero/internal/video"
 )
 
 const loc04Actor = "RodrigoLarge"
@@ -151,13 +152,18 @@ func (LOC04Controller) LoadConditionMask(ctx *Context, scene string) int {
 func loc04InitializeScene(ctx *Context) engine.Task {
 	return engine.Immediate(func() {
 		scene := ctx.session.scene
+		loc04AuditLayers(ctx)
+		for _, layer := range scene.Layers {
+			if _, ok := layer.Source.(*video.Source); ok {
+				layer.ColorKeyed = false
+			}
+		}
 		for _, id := range []string{"RodRein", "RodRaus", "RodSetzen", "RamilRein", "RamilRaus", "RamilGeld"} {
 			if layer, ok := scene.Layers[id]; ok {
 				layer.Presentation = true
 				layer.ColorKeyed = false
 			}
 		}
-		loc04AuditLayers(ctx)
 		for _, id := range loc04DormantLayers {
 			if layer, ok := scene.Layers[id]; ok {
 				layer.Visible = false
