@@ -1127,12 +1127,10 @@ func (c LOC01Controller) dropScene7AMoneyBag(ctx *Context) engine.Task {
 
 func (c LOC01Controller) enter7AReturnHomeFrom8(ctx *Context) engine.Task {
 	return engine.Sequence(
-		ctx.PlaceActor(loc01Actor, 0xbc, 0xaa),
-		ctx.HideActor(loc01Actor),
+		ctx.PlaceActor(loc01Actor, loc7AGliderDepartX, loc7AGliderDepartY),
 		ctx.PlaySFX("Sfx_Glider_PassingBy.wav"),
 		ctx.PlayVideo(c.stairCamVariant(ctx, "RETURNHOMECAM")),
-		ctx.PlaceActor(loc01Actor, 0x13b, 0x9d),
-		ctx.ShowActor(loc01Actor),
+		ctx.WalkTo(loc01Actor, 0x13b, 0x9d),
 	)
 }
 
