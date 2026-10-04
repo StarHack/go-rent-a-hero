@@ -35,13 +35,13 @@ func (d *Decoder) outputRGBA() []byte {
 				continue
 			}
 
-			Y := int(y[py*d.picWidth+px])
+			Y := int(y[py*d.picWidth+px]) - 16
 			U := int(u[cy*cw+cx]) - 128
 			V := int(v[cy*cw+cx]) - 128
 
-			out[o+0] = clipUint8(Y + (91881*V)>>16)
-			out[o+1] = clipUint8(Y - (22554*U+46802*V)>>16)
-			out[o+2] = clipUint8(Y + (116130*U)>>16)
+			out[o+0] = clipUint8((298*Y + 409*V + 128) >> 8)
+			out[o+1] = clipUint8((298*Y - 100*U - 208*V + 128) >> 8)
+			out[o+2] = clipUint8((298*Y + 516*U + 128) >> 8)
 			out[o+3] = 255
 		}
 	}

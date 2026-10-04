@@ -214,6 +214,12 @@ func loc05InitializeLayers(ctx *Context) engine.Task {
 				l.TaskDriven = false
 			}
 		}
+		if l := ctx.session.scene.Layers["S10_DoorOpen"]; l != nil {
+			l.ColorKeyed = false
+		}
+		if l := ctx.session.scene.Layers["S10_LouiTalk"]; l != nil {
+			l.ColorKeyed = false
+		}
 	})
 }
 
