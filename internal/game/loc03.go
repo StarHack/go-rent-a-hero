@@ -57,7 +57,7 @@ func (LOC03Controller) Enter(ctx *Context, scene string, from string) engine.Tas
 		)
 	case "S0015":
 		tasks = append(tasks, loc03AttackArrival(ctx))
-	case "13":
+	case "13", "S0013":
 		tasks = append(tasks,
 			ctx.ShowLayer("S12_RodGlider"),
 			ctx.PlaceActor(loc03Actor, 0x27A, 0x10E),
