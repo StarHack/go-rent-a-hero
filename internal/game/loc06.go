@@ -138,7 +138,7 @@ func loc06Enter26(ctx *Context, from string) engine.Task {
 	stage := loc06Original(ctx, loc06StateVisitStage)
 	tasks := []engine.Task{ctx.PlayMusic("Loc06_Ranama.wav"), engine.Immediate(func() { ctx.session.state.Flags["loc06_s26_bottle_count"] = 0 }), ctx.EnableArea("S26_Exit"), ctx.EnableArea("S26_Bottle"), ctx.EnableArea("S26_Telescope"), ctx.EnableArea("S26_Background")}
 	if stage == 1 {
-		tasks = append(tasks, ctx.HideLayer("S26_RanFaellt"), ctx.ShowLayer("S26_RanTalk"), ctx.MakeLayerClickable("S26_RanTalk"), ctx.DisableArea("S26_Ranama"))
+		tasks = append(tasks, ctx.HideLayer("S26_RanFaellt"), ctx.FreezeLayer("S26_RanTalk", 0), ctx.ShowLayer("S26_RanTalk"), ctx.MakeLayerClickable("S26_RanTalk"), ctx.DisableArea("S26_Ranama"))
 	} else {
 		tasks = append(tasks, ctx.ShowLayer("S26_RanBesen"), ctx.FreezeLayer("S26_RanBesen", 0x33), ctx.EnableArea("S26_Ranama"))
 	}
@@ -193,7 +193,9 @@ func loc06Enter27(ctx *Context) engine.Task {
 		ctx.EnableArea("S27_Exit"),
 		ctx.ShowLayer("S27_RanTalkRing"),
 		ctx.MakeLayerClickable("S27_RanTalkRing"),
+		ctx.FreezeLayer("S27_RodTalk", 0),
 		ctx.ShowLayer("S27_RodTalk"),
+		ctx.FreezeLayer("S27_RanTalk", 0),
 		ctx.ShowLayer("S27_RanTalk"),
 		ctx.MakeLayerClickable("S27_RanTalk"),
 	}

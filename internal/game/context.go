@@ -450,6 +450,7 @@ func (t *speechBoundAnimationTask) Update(dt float64) bool {
 		t.started = true
 		t.layer.Visible = true
 		t.layer.Enabled = true
+		t.layer.Playing = false
 		t.layer.TaskDriven = true
 		if !t.natural {
 			t.layer.Frame = t.start
@@ -466,25 +467,12 @@ func (t *speechBoundAnimationTask) Update(dt float64) bool {
 			end = t.layer.Source.Frames() - 1
 		}
 	}
-	if t.track != nil && !t.natural {
-		fps := t.layer.FPS
-		if fps <= 0 {
-			fps = int(math.Round(t.track.Rate))
-		}
-		if fps <= 0 {
-			fps = 20
-		}
-		t.layer.Accumulator += dt
-		frameDuration := 1.0 / float64(fps)
-		if t.layer.Accumulator >= frameDuration {
-			for t.layer.Accumulator >= frameDuration {
-				t.layer.Accumulator -= frameDuration
-			}
-			mouth := t.track.MouthStateAt(t.elapsed)
-			frame := start
-			if mouth != 0xffff {
-				frame = int(mouth)
-			}
+	if t.track != nil {
+		mouth := t.track.MouthStateAt(t.elapsed)
+		if mouth == 0xffff {
+			t.layer.Frame = start
+		} else {
+			frame := int(mouth)
 			if t.layer.Source == nil || (frame >= 0 && frame < t.layer.Source.Frames()) {
 				t.layer.Frame = frame
 			}
@@ -518,6 +506,7 @@ func (t *speechBoundAnimationTask) Update(dt float64) bool {
 		}
 		t.layer.Frame = reset
 		t.layer.Accumulator = 0
+		t.layer.Playing = false
 		t.layer.TaskDriven = false
 		return true
 	}
