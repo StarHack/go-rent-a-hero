@@ -134,6 +134,8 @@ func loc02Enter13(ctx *Context, from string) []engine.Task {
 		}
 	}
 	switch from {
+	case "S12":
+		tasks = append(tasks, ctx.PlaceActor(loc02ActorID(ctx), 0x2b, 0x117), ctx.SetActorDirection(loc02ActorID(ctx), 6), ctx.ShowActor(loc02ActorID(ctx)))
 	case "S1013":
 		tasks = append(tasks, ctx.PlaceActor(loc02ActorID(ctx), 0x189, 0x15e), ctx.WalkToFacing(loc02ActorID(ctx), 0x189, 0x159, 4))
 	case "S2013":

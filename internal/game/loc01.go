@@ -581,7 +581,7 @@ func (c LOC01Controller) Enter(ctx *Context, scene string, from string) engine.T
 		// like every other Scene-7A entry, regardless of arrival direction.
 		tasks = append(tasks, ctx.MakeLayerClickable(loc7AGliderLayer))
 
-		switch scene7AEntry(from) {
+		switch scene7AEntry(from, ctx.session.state.PreviousLocation) {
 		case entry7AFromOffice:
 			tasks = append(tasks,
 				ctx.PlaceActor(loc01Actor, loc7AOfficeReturnX, loc7AOfficeReturnY),
@@ -1077,7 +1077,7 @@ const (
 	entry7AReturnHomeFrom8
 )
 
-func scene7AEntry(from string) scene7AEntryReason {
+func scene7AEntry(from string, previousLocation int) scene7AEntryReason {
 	switch from {
 	case loc7ADoorTargetScene:
 		return entry7AFromOffice
@@ -1085,11 +1085,30 @@ func scene7AEntry(from string) scene7AEntryReason {
 		return entry7AFrom7B
 	case loc7AFirstEncounterFrom, "":
 		return entry7AReturnHomeMarker5
-	case "8", "S113":
+	case "8":
 		return entry7AReturnHomeFrom8
-	default:
-		return entry7ANormal
 	}
+
+	switch previousLocation {
+	case 3:
+		if from == "S12" {
+			return entry7AReturnHomeFrom8
+		}
+	case 37:
+		if from == "S3" {
+			return entry7AReturnHomeFrom8
+		}
+	case 6:
+		if from == "026" {
+			return entry7AReturnHomeFrom8
+		}
+	case 31:
+		if from == "S113" {
+			return entry7AReturnHomeFrom8
+		}
+	}
+
+	return entry7ANormal
 }
 
 // enter7AReturnHomeMarker5 is FUN_004072e0 for previousScene == 5, per
