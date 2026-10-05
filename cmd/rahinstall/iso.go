@@ -24,10 +24,11 @@ type isoNode struct {
 }
 
 type isoSource struct {
-	file   *os.File
-	reader io.ReaderAt
-	size   int64
-	root   *isoNode
+	file       *os.File
+	reader     io.ReaderAt
+	size       int64
+	root       *isoNode
+	decodeName func([]byte) (string, error)
 }
 
 type sectionReadSeekCloser struct {
@@ -74,52 +75,86 @@ func newISOSource(file *os.File, reader io.ReaderAt, size int64) (*isoSource, er
 }
 
 func (s *isoSource) load() error {
-	var pvd [isoSectorSize]byte
-	found := false
+	var descriptor [isoSectorSize]byte
+	var primary []byte
+	var joliet []byte
+	jolietLevel := 0
 
 	for sector := int64(16); sector < 64; sector++ {
-		if _, err := s.reader.ReadAt(pvd[:], sector*isoSectorSize); err != nil {
+		if _, err := s.reader.ReadAt(descriptor[:], sector*isoSectorSize); err != nil {
 			return err
 		}
 
-		if string(pvd[1:6]) != "CD001" {
+		if string(descriptor[1:6]) != "CD001" {
 			continue
 		}
 
-		if pvd[0] == 1 {
-			found = true
-			break
-		}
-
-		if pvd[0] == 255 {
-			break
+		switch descriptor[0] {
+		case 1:
+			if primary == nil {
+				primary = append([]byte(nil), descriptor[:]...)
+			}
+		case 2:
+			level := jolietDescriptorLevel(descriptor[:])
+			if level > jolietLevel {
+				joliet = append([]byte(nil), descriptor[:]...)
+				jolietLevel = level
+			}
+		case 255:
+			sector = 64
 		}
 	}
 
-	if !found {
+	selected := primary
+	s.decodeName = decodeISOIdentifier
+	if joliet != nil {
+		selected = joliet
+		s.decodeName = decodeJolietIdentifier
+	}
+	if selected == nil {
 		return fmt.Errorf("primary volume descriptor not found")
 	}
 
-	rootRecord := pvd[156:]
+	rootRecord := selected[156:]
 	if len(rootRecord) < 34 || rootRecord[0] < 34 {
 		return fmt.Errorf("invalid root directory record")
 	}
 
-	root, err := parseISORecord(rootRecord[:rootRecord[0]])
+	root, err := parseISORecordWithDecoder(rootRecord[:rootRecord[0]], s.decodeName)
 	if err != nil {
 		return err
 	}
 
 	root.name = ""
 	root.children = make(map[string]*isoNode)
-
 	s.root = root
 
 	seen := make(map[uint64]bool)
 	return s.loadDirectory(root, seen)
 }
 
+func jolietDescriptorLevel(descriptor []byte) int {
+	if len(descriptor) < 91 || descriptor[0] != 2 || string(descriptor[1:6]) != "CD001" {
+		return 0
+	}
+
+	switch string(descriptor[88:91]) {
+	case "%/@":
+		return 1
+	case "%/C":
+		return 2
+	case "%/E":
+		return 3
+	default:
+		return 0
+	}
+}
+
 func parseISORecord(record []byte) (*isoNode, error) {
+	return parseISORecordWithDecoder(record, decodeISOIdentifier)
+}
+
+func parseISORecordWithDecoder(record []byte, decodeName func([]byte) (string, error)) (*isoNode, error) {
 	if len(record) < 34 {
 		return nil, fmt.Errorf("short directory record")
 	}
@@ -130,16 +165,15 @@ func parseISORecord(record []byte) (*isoNode, error) {
 	}
 
 	nameBytes := record[33 : 33+nameLen]
-
 	name := ""
 	if nameLen == 1 && (nameBytes[0] == 0 || nameBytes[0] == 1) {
 		name = string(nameBytes)
 	} else {
-		if pos := bytes.IndexByte(nameBytes, ';'); pos >= 0 {
-			nameBytes = nameBytes[:pos]
+		var err error
+		name, err = decodeName(nameBytes)
+		if err != nil {
+			return nil, err
 		}
-		nameBytes = bytes.TrimSuffix(nameBytes, []byte("."))
-		name = decodeISOName(nameBytes)
 	}
 
 	return &isoNode{
@@ -148,6 +182,36 @@ func parseISORecord(record []byte) (*isoNode, error) {
 		extent: binary.LittleEndian.Uint32(record[2:6]),
 		size:   binary.LittleEndian.Uint32(record[10:14]),
 	}, nil
+}
+
+func decodeISOIdentifier(name []byte) (string, error) {
+	if pos := bytes.IndexByte(name, ';'); pos >= 0 {
+		name = name[:pos]
+	}
+	name = bytes.TrimSuffix(name, []byte("."))
+	return decodeISOName(name), nil
+}
+
+func decodeJolietIdentifier(name []byte) (string, error) {
+	if len(name)%2 != 0 {
+		return "", fmt.Errorf("invalid Joliet identifier length %d", len(name))
+	}
+
+	runes := make([]rune, 0, len(name)/2)
+	for i := 0; i < len(name); i += 2 {
+		r := rune(binary.BigEndian.Uint16(name[i : i+2]))
+		if r == 0 {
+			continue
+		}
+		runes = append(runes, r)
+	}
+
+	decoded := string(runes)
+	if pos := strings.IndexByte(decoded, ';'); pos >= 0 {
+		decoded = decoded[:pos]
+	}
+	decoded = strings.TrimSuffix(decoded, ".")
+	return decoded, nil
 }
 
 // decodeISOName turns an ISO9660 file identifier into a UTF-8 path
@@ -202,7 +266,7 @@ func (s *isoSource) loadDirectory(dir *isoNode, seen map[uint64]bool) error {
 			return fmt.Errorf("directory record extends past directory data")
 		}
 
-		node, err := parseISORecord(data[pos : pos+length])
+		node, err := parseISORecordWithDecoder(data[pos:pos+length], s.decodeName)
 		if err != nil {
 			return err
 		}
