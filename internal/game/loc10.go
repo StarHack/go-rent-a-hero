@@ -495,11 +495,12 @@ func loc10Nav37(ctx *Context, actor string, n int) engine.Task {
 		5: {0xc2, 0xeb, 1, 0xf0, 0xd5, 6},
 		6: {0xbb, 0xca, 2, 0xe4, 0xcd, 6},
 	}[n]
+	jas := loc10JasminActorID(ctx)
 	if n == 1 {
-		jas := loc10JasminActorID(ctx)
 		return engine.Sequence(
 			ctx.WalkToFacingPerspective(actor, p[0], p[1], int(p[2])),
 			ctx.HideLayer("S37_JasPointN"),
+			ctx.ShowActor(jas),
 			ctx.RunAmbient(ctx.WalkToFacingPerspective(jas, 0x145, 0x70, 4)),
 			ctx.WalkToFacingPerspective(actor, 0x145, 0x70, 4),
 			ctx.ChangeScene("S38"),
@@ -508,7 +509,10 @@ func loc10Nav37(ctx *Context, actor string, n int) engine.Task {
 	return engine.Sequence(
 		ctx.WalkToFacingPerspective(actor, p[0], p[1], int(p[2])),
 		ctx.PlayVoiceover("037_JAS_02", "[037_JAS_02]"),
+		ctx.ShowLayer("S37_JasPointN"),
 		loc10PlayLayerDeferred(ctx, "S37_JasPointN"),
+		ctx.HideLayer("S37_JasPointN"),
+		ctx.ShowActor(jas),
 		ctx.WalkToFacingPerspective(actor, p[3], p[4], int(p[5])),
 	)
 }
@@ -520,6 +524,7 @@ func loc10Nav38(ctx *Context, actor string, e int) engine.Task {
 			return engine.Sequence(
 				ctx.WalkToFacingPerspective(actor, 0x6e, 0xa8, 3),
 				ctx.HideLayer("S38_JasPointsNW"),
+				ctx.ShowActor(jas),
 				ctx.RunAmbient(ctx.WalkToFacingPerspective(jas, 10, 0x88, 3)),
 				ctx.WalkToFacingPerspective(actor, 10, 0x88, 3),
 				ctx.HideActor(jas),
@@ -535,7 +540,10 @@ func loc10Nav38(ctx *Context, actor string, e int) engine.Task {
 			ctx.WalkToFacingPerspective(actor, p[0], p[1], int(p[2])),
 			ctx.PlayVoiceover("038_JAS_01", "[038_JAS_01]"),
 			ctx.HideActor(jas),
+			ctx.ShowLayer("S38_JasPointsNW"),
 			loc10PlayLayerDeferred(ctx, "S38_JasPointsNW"),
+			ctx.HideLayer("S38_JasPointsNW"),
+			ctx.ShowActor(jas),
 			ctx.WalkToFacingPerspective(actor, p[3], p[4], int(p[5])),
 		)
 	}
@@ -1103,7 +1111,7 @@ func loc10Slug(ctx *Context, actor string) engine.Task {
 }
 
 func loc10WoodChase(ctx *Context) engine.Task {
-	return engine.Sequence(loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 0, 5), ctx.PlayVoiceover("066_JAS_01", "[066_JAS_01]"), loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 6, 0x1d), ctx.PlayVoiceover("066_JAS_02", "[066_JAS_02]"), loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 0x1e, 0x28), ctx.PlaySFX("Sfx_Explosion_Misc2.wav"), loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 0x29, 0x2f), ctx.PlayVoiceover("066_JAS_03", "[066_JAS_03]"), loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 0x30, 0x3d), ctx.PlaySFX("Sfx_Explosion_Misc2.wav"), loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 0x3e, -1), engine.Immediate(func() { loc10SetOriginal(ctx, loc10StateGlider, 0) }), ctx.ChangeScene("S37"))
+	return engine.Sequence(loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 0, 5), ctx.RunAmbient(ctx.PlayVoiceover("066_JAS_01", "[066_JAS_01]")), loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 6, 0x1d), ctx.RunAmbient(ctx.PlayVoiceover("066_JAS_02", "[066_JAS_02]")), loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 0x1e, 0x28), ctx.PlaySFX("Sfx_Explosion_Misc2.wav"), loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 0x29, 0x2f), ctx.RunAmbient(ctx.PlayVoiceover("066_JAS_03", "[066_JAS_03]")), loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 0x30, 0x3d), ctx.PlaySFX("Sfx_Explosion_Misc2.wav"), loc10PlayLayerFramesDeferred(ctx, "S66_WoodChase", 0x3e, -1), engine.Immediate(func() { loc10SetOriginal(ctx, loc10StateGlider, 0) }), ctx.ChangeScene("S37"))
 }
 
 func loc10SyncJasminActor(ctx *Context) {

@@ -1,6 +1,8 @@
 package avi
 
 import (
+	"bytes"
+	"encoding/binary"
 	"math"
 	"os"
 	"path/filepath"
@@ -69,4 +71,92 @@ func TestParseRejectsNonRIFF(t *testing.T) {
 	if _, err := Parse([]byte("not an avi file at all")); err == nil {
 		t.Fatal("expected an error for non-RIFF data")
 	}
+}
+
+func TestParseCollectsFramesAcrossAVIXSegments(t *testing.T) {
+	strh := make([]byte, 28)
+	copy(strh[0:4], "vids")
+	binary.LittleEndian.PutUint32(strh[20:24], 1)
+	binary.LittleEndian.PutUint32(strh[24:28], 15)
+
+	strf := make([]byte, 40)
+	binary.LittleEndian.PutUint32(strf[0:4], 40)
+	binary.LittleEndian.PutUint32(strf[4:8], 320)
+	binary.LittleEndian.PutUint32(strf[8:12], 200)
+	binary.LittleEndian.PutUint16(strf[14:16], 24)
+	copy(strf[16:20], "cvid")
+
+	strl := riffList("strl", riffChunk("strh", strh), riffChunk("strf", strf))
+	hdrl := riffList("hdrl", strl)
+	firstFrame := []byte{1, 2, 3}
+	secondFrame := []byte{4, 5, 6, 7}
+	avi := riffFile("AVI ", hdrl, riffList("movi", riffChunk("00dc", firstFrame)))
+	avix := riffFile("AVIX", riffList("movi", riffChunk("00dc", secondFrame)))
+	data := append(avi, avix...)
+
+	vs, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(vs.Frames) != 2 {
+		t.Fatalf("len(Frames) = %d, want 2", len(vs.Frames))
+	}
+	if !bytes.Equal(vs.Frames[0], firstFrame) {
+		t.Fatalf("frame 0 = %v, want %v", vs.Frames[0], firstFrame)
+	}
+	if !bytes.Equal(vs.Frames[1], secondFrame) {
+		t.Fatalf("frame 1 = %v, want %v", vs.Frames[1], secondFrame)
+	}
+}
+
+func TestParseIgnoresTrailingBytesAfterRIFFSegments(t *testing.T) {
+	strh := make([]byte, 28)
+	copy(strh[0:4], "vids")
+	binary.LittleEndian.PutUint32(strh[20:24], 1)
+	binary.LittleEndian.PutUint32(strh[24:28], 10)
+
+	strf := make([]byte, 40)
+	binary.LittleEndian.PutUint32(strf[0:4], 40)
+	binary.LittleEndian.PutUint32(strf[4:8], 16)
+	binary.LittleEndian.PutUint32(strf[8:12], 16)
+	binary.LittleEndian.PutUint16(strf[14:16], 24)
+	copy(strf[16:20], "cvid")
+
+	data := riffFile("AVI ", riffList("hdrl", riffList("strl", riffChunk("strh", strh), riffChunk("strf", strf))), riffList("movi", riffChunk("00dc", []byte{9})))
+	data = append(data, []byte("trailing-data")...)
+
+	vs, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(vs.Frames) != 1 {
+		t.Fatalf("len(Frames) = %d, want 1", len(vs.Frames))
+	}
+}
+
+func riffChunk(id string, body []byte) []byte {
+	var buf bytes.Buffer
+	buf.WriteString(id)
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(len(body)))
+	buf.Write(body)
+	if len(body)%2 != 0 {
+		buf.WriteByte(0)
+	}
+	return buf.Bytes()
+}
+
+func riffList(listType string, chunks ...[]byte) []byte {
+	body := []byte(listType)
+	for _, chunk := range chunks {
+		body = append(body, chunk...)
+	}
+	return riffChunk("LIST", body)
+}
+
+func riffFile(formType string, chunks ...[]byte) []byte {
+	body := []byte(formType)
+	for _, chunk := range chunks {
+		body = append(body, chunk...)
+	}
+	return riffChunk("RIFF", body)
 }

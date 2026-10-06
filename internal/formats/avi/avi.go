@@ -33,35 +33,63 @@ func Parse(data []byte) (*VideoStream, error) {
 	}
 
 	vs := &VideoStream{streamIndex: -1}
+	offset := 0
+	segment := 0
 
-	// The RIFF header's own declared size is authoritative for where the
-	// real content ends; some real-world captures (observed in this
-	// game's own assets) have extra trailing bytes past it (padding, a
-	// truncated re-save, ...) that must not be walked into as if they
-	// were further chunks.
-	riffSize := binary.LittleEndian.Uint32(data[4:8])
-	end := max(min(8+int(riffSize), len(data)), 12)
-
-	err := walk(data[12:end], func(id string, body []byte) error {
-		listType, rest, ok := asList(id, body)
-		if !ok {
-			return nil
+	for offset+12 <= len(data) {
+		if string(data[offset:offset+4]) != "RIFF" {
+			break
 		}
 
-		switch listType {
-		case "hdrl":
-			return parseHeaderList(rest, vs)
-		case "movi":
-			if vs.streamIndex < 0 {
-				return fmt.Errorf("avi: \"movi\" list appears before stream headers")
+		riffSize := uint64(binary.LittleEndian.Uint32(data[offset+4 : offset+8]))
+		if riffSize < 4 {
+			return nil, fmt.Errorf("avi: RIFF segment %d is too small: %d bytes", segment, riffSize)
+		}
+
+		bodyStart := uint64(offset) + 8
+		bodyEnd := bodyStart + riffSize
+		if bodyEnd > uint64(len(data)) {
+			return nil, fmt.Errorf("avi: RIFF segment %d declares size %d beyond available %d bytes", segment, riffSize, len(data)-int(bodyStart))
+		}
+
+		formType := string(data[offset+8 : offset+12])
+		if segment == 0 && formType != "AVI " {
+			return nil, fmt.Errorf("avi: first RIFF segment has form %q, want \"AVI \"", formType)
+		}
+		if segment > 0 && formType != "AVIX" && formType != "AVI " {
+			break
+		}
+
+		contentStart := offset + 12
+		contentEnd := int(bodyEnd)
+		err := walk(data[contentStart:contentEnd], func(id string, body []byte) error {
+			listType, rest, ok := asList(id, body)
+			if !ok {
+				return nil
 			}
-			return collectFrames(rest, vs.streamIndex, &vs.Frames)
+
+			switch listType {
+			case "hdrl":
+				return parseHeaderList(rest, vs)
+			case "movi":
+				if vs.streamIndex < 0 {
+					return fmt.Errorf("avi: \"movi\" list appears before stream headers")
+				}
+				return collectFrames(rest, vs.streamIndex, &vs.Frames)
+			}
+
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
 
-		return nil
-	})
-	if err != nil {
-		return nil, err
+		next := bodyEnd + riffSize%2
+		if next > uint64(len(data)) {
+			break
+		}
+		offset = int(next)
+		segment++
 	}
 
 	if vs.streamIndex < 0 {
