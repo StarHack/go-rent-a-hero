@@ -179,7 +179,7 @@ func (LOC16Controller) Click(ctx *Context, area string) engine.Task {
 		return engine.Sequence(ctx.WalkToFacingPerspective(actor, 0x10, 300, 2), ctx.ChangeLocation(15, "57"))
 	case "S58_To59":
 		if getOriginalFlag(ctx.session.state.OriginalState, loc16StatePiratesGone) != 0 {
-			return engine.Sequence(loc16DragonVoice(ctx, "058_DRA_34", 0, 8), ctx.PlayVoiceover("058_ROD_35", ""))
+			return engine.Sequence(loc16DragonVoice(ctx, "058_DRA_34", 0, 8), ctx.Say(actor, "058_ROD_35", ""))
 		}
 		if getOriginalFlag(ctx.session.state.OriginalState, loc16StateCanExit59) == 0 {
 			return engine.Sequence(loc16DragonReturn(ctx, false), ctx.WalkToFacingPerspective(actor, 0x201, 0x11b, 2), loc16DragonPosedVoice(ctx, "058_DRA_33", 3, 0x49, 0x4d), ctx.WalkToFacingPerspective(actor, 0x1ca, 0x138, 3), loc16DragonReturn(ctx, false), loc16ScheduleDragonIdle(ctx))
@@ -225,10 +225,10 @@ func loc16DragonClick(ctx *Context, actor string) engine.Task {
 	if getOriginalFlag(state, loc16StatePiratesGone) == 0 {
 		stage := getOriginalFlag(state, loc16StateDragonStage)
 		if stage == 1 {
-			return engine.Sequence(move, ctx.PlayVoiceover("058_ROD_07", ""), ctx.HideActor(actor), ctx.ShowLayer("S58_RodAngriff"), ctx.PlayLayerFrames("S58_RodAngriff", 0, 4), ctx.PlaySFX("Sfx_Woosh.wav"), ctx.PlayLayerFrames("S58_RodAngriff", 5, 10), loc16DragonVoice(ctx, "058_DRA_07", 0, 8), ctx.PlayLayerFrames("S58_RodAngriff", 11, -1), ctx.HideLayer("S58_RodAngriff"), ctx.ShowActor(actor), loc15SetOriginal(ctx, loc16StateDragonStage, 2))
+			return engine.Sequence(move, ctx.Say(actor, "058_ROD_07", ""), ctx.HideActor(actor), ctx.ShowLayer("S58_RodAngriff"), ctx.PlayLayerFrames("S58_RodAngriff", 0, 4), ctx.PlaySFX("Sfx_Woosh.wav"), ctx.PlayLayerFrames("S58_RodAngriff", 5, 10), loc16DragonVoice(ctx, "058_DRA_07", 0, 8), ctx.PlayLayerFrames("S58_RodAngriff", 11, -1), ctx.HideLayer("S58_RodAngriff"), ctx.ShowActor(actor), loc15SetOriginal(ctx, loc16StateDragonStage, 2))
 		}
 		if stage == 9 {
-			return engine.Sequence(move, loc16DragonReturn(ctx, false), ctx.PlayVoiceover("058_ROD_15", ""), loc16DragonPosedVoice(ctx, "058_DRA_15", 4, 0x6e, 0x76), loc16DragonReturn(ctx, false), loc15SetOriginal(ctx, loc16StateCanExit59, 1), loc16ConfigureDragonAccess(ctx), ctx.WalkToFacingPerspective(actor, 500, 0xda, 4), loc15SetOriginal(ctx, loc16StateDragonStage, 10), ctx.ChangeLocation(17, "59"))
+			return engine.Sequence(move, loc16DragonReturn(ctx, false), ctx.Say(actor, "058_ROD_15", ""), loc16DragonPosedVoice(ctx, "058_DRA_15", 4, 0x6e, 0x76), loc16DragonReturn(ctx, false), loc15SetOriginal(ctx, loc16StateCanExit59, 1), loc16ConfigureDragonAccess(ctx), ctx.WalkToFacingPerspective(actor, 500, 0xda, 4), loc15SetOriginal(ctx, loc16StateDragonStage, 10), ctx.ChangeLocation(17, "59"))
 		}
 		rod := fmt.Sprintf("058_ROD_%02d", stage+6)
 		dra := fmt.Sprintf("058_DRA_%02d", stage+6)
@@ -244,7 +244,7 @@ func loc16DragonClick(ctx *Context, actor string) engine.Task {
 		case 1, 2, 3:
 			return engine.Sequence(move, loc16Conversation(ctx, fmt.Sprintf("058_ROD_%02d", stage+24), fmt.Sprintf("058_DRA_%02d", stage+24)), loc15SetOriginal(ctx, loc16StateFlightStage, stage+1))
 		case 4:
-			return engine.Sequence(move, loc16Conversation(ctx, "058_ROD_28", "058_DRA_28"), ctx.PlayVoiceover("058_ROD_29", ""), loc15SetOriginal(ctx, loc16StateFlightStage, 5))
+			return engine.Sequence(move, loc16Conversation(ctx, "058_ROD_28", "058_DRA_28"), ctx.Say(actor, "058_ROD_29", ""), loc15SetOriginal(ctx, loc16StateFlightStage, 5))
 		case 5:
 			return engine.Sequence(move, ctx.WalkToFacingPerspective(actor, 0x1ab, 0x11e, 4), loc16DragonVoice(ctx, "058_DRA_30", 0, 8), loc16Conversation(ctx, "058_ROD_30", "058_DRA_31"), loc15SetOriginal(ctx, loc16StateFlightStage, 6), loc16DragonTakeoff(ctx, actor))
 		case 6:
@@ -258,9 +258,9 @@ func loc16DragonClick(ctx *Context, actor string) engine.Task {
 	var talk engine.Task
 	switch stage {
 	case 1:
-		talk = engine.Sequence(loc16DragonReturn(ctx, false), ctx.PlayVoiceover("058_ROD_19", ""), loc16DragonPosedVoice(ctx, "058_DRA_19", 5, 0x8b, 0x94), loc16DragonReturn(ctx, false), loc16ScheduleDragonIdle(ctx))
+		talk = engine.Sequence(loc16DragonReturn(ctx, false), ctx.Say(actor, "058_ROD_19", ""), loc16DragonPosedVoice(ctx, "058_DRA_19", 5, 0x8b, 0x94), loc16DragonReturn(ctx, false), loc16ScheduleDragonIdle(ctx))
 	case 4:
-		talk = engine.Sequence(ctx.SetActorDirection(actor, 5), ctx.HideActor(actor), ctx.ShowLayer("S58_RodLooksSky"), ctx.PlayLayer("S58_RodLooksSky"), ctx.HideLayer("S58_RodLooksSky"), ctx.ShowActor(actor), ctx.PlayVoiceover("058_ROD_22", ""), ctx.WalkToFacingPerspective(actor, 0x160, 0x155, 5), ctx.HideActor(actor), ctx.ShowLayer("S58_RodSitDown"), ctx.PlayLayerFrames("S58_RodSitDown", 0, 10), loc16DragonVoice(ctx, "058_DRA_22", 0, 8), ctx.PlayLayerFrames("S58_RodSitDown", 11, -1), ctx.HideLayer("S58_RodSitDown"), ctx.ShowActor(actor))
+		talk = engine.Sequence(ctx.SetActorDirection(actor, 5), ctx.HideActor(actor), ctx.ShowLayer("S58_RodLooksSky"), ctx.PlayLayer("S58_RodLooksSky"), ctx.HideLayer("S58_RodLooksSky"), ctx.ShowActor(actor), ctx.Say(actor, "058_ROD_22", ""), ctx.WalkToFacingPerspective(actor, 0x160, 0x155, 5), ctx.HideActor(actor), ctx.ShowLayer("S58_RodSitDown"), ctx.PlayLayerFrames("S58_RodSitDown", 0, 10), loc16DragonVoice(ctx, "058_DRA_22", 0, 8), ctx.PlayLayerFrames("S58_RodSitDown", 11, -1), ctx.HideLayer("S58_RodSitDown"), ctx.ShowActor(actor))
 	case 6:
 		talk = engine.Sequence(loc16Conversation(ctx, "058_ROD_24", "058_DRA_24"), loc16SetFlag1To2(ctx, 0x3f74))
 	default:

@@ -516,7 +516,14 @@ func (t *loc27Ambient) Update(dt float64) bool {
 	}
 	ids := []string{"S96_Bubble", "S96_Pump", "S96_Steam"}
 	id := ids[rand.IntN(len(ids))]
-	t.inner = engine.Sequence(t.ctx.ShowLayer(id), t.ctx.PlayLayer(id), t.ctx.HideLayer(id))
+	if id == "S96_Pump" {
+		// The original plays the pump with animation mode 0x0B. Unlike the
+		// transient Bubble/Steam effects, it remains visible as part of the
+		// machine after the animation finishes.
+		t.inner = engine.Sequence(t.ctx.ShowLayer(id), t.ctx.PlayLayer(id))
+	} else {
+		t.inner = engine.Sequence(t.ctx.ShowLayer(id), t.ctx.PlayLayer(id), t.ctx.HideLayer(id))
+	}
 	return false
 }
 

@@ -2,11 +2,13 @@ package game
 
 import (
 	"math/rand/v2"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/wok/rent-a-hero/internal/audio"
 	"github.com/wok/rent-a-hero/internal/engine"
+	"github.com/wok/rent-a-hero/internal/formats/acs"
 )
 
 const (
@@ -45,7 +47,118 @@ func loc26Rod(ctx *Context, line string) engine.Task {
 }
 
 func loc26Dragon(ctx *Context, line string, start, end int) engine.Task {
-	return ctx.PlaySpeechBoundToLayer("S93_DragonBreath", line, "["+line+"]", start, end)
+	return &loc26DragonSpeechTask{ctx: ctx, line: line, fallbackFrame: start}
+}
+
+type loc26DragonSpeechTask struct {
+	ctx           *Context
+	line          string
+	fallbackFrame int
+	layer         *engine.Layer
+	track         *acs.Track
+	handle        audio.Handle
+	fallback      engine.Task
+	initialFrame  int
+	started       bool
+}
+
+func (t *loc26DragonSpeechTask) Update(dt float64) bool {
+	if !t.started {
+		t.started = true
+
+		layer, ok := t.ctx.layer("S93_DragonBreath")
+		if !ok {
+			var err error
+			layer, _, err = t.ctx.ensureAssetLayer("S93_DragonBreath")
+			if err != nil {
+				t.fallback = t.ctx.PlayVoiceover(t.line, "["+t.line+"]")
+				return t.fallback.Update(dt)
+			}
+		}
+		t.layer = layer
+		t.layer.Visible = true
+		t.layer.Enabled = true
+		t.layer.Playing = false
+		t.layer.TaskDriven = true
+		t.layer.Accumulator = 0
+
+		if acsPath, err := t.ctx.session.idx.ResolveBaseName(t.line + ".ACS"); err == nil {
+			if data, err := os.ReadFile(acsPath); err == nil {
+				if track, err := acs.Parse(data); err == nil && len(track.Samples) != 0 {
+					t.track = track
+				}
+			}
+		}
+
+		// FUN_00442ef0 initializes the bound animation from the first ACS
+		// sample with an offset of zero. Without ACS, FUN_00442f90 receives
+		// the authored fallback range (10..10 in S93).
+		t.initialFrame = t.fallbackFrame
+		if t.track != nil {
+			first := t.track.Samples[0]
+			if first != 0xffff {
+				t.initialFrame = int(first)
+			}
+		}
+		loc26SetLayerFrame(t.layer, t.initialFrame)
+
+		sound, err := engine.LoadSoundByBaseName(t.ctx.session.idx, t.line+".WAV")
+		if err != nil {
+			t.layer.Frame = t.fallbackFrame
+			t.layer.TaskDriven = false
+			return true
+		}
+		t.handle = t.ctx.session.audioEngine.Play(sound, audio.CategorySpeech)
+		t.ctx.session.currentSubtitle = "[" + t.line + "]"
+	}
+
+	if t.fallback != nil {
+		return t.fallback.Update(dt)
+	}
+
+	if t.track != nil && t.handle != nil {
+		// Original FUN_00442730 uses the audio object's playback position:
+		// sampleIndex = elapsedMilliseconds * ACSRate / 1000.
+		index := int(t.handle.Elapsed() * t.track.Rate)
+		if index < 0 {
+			index = 0
+		}
+		if index >= len(t.track.Samples) {
+			index = len(t.track.Samples) - 1
+		}
+		sample := t.track.Samples[index]
+		if sample == 0xffff {
+			// FUN_004429d0 returns to the animation frame captured when
+			// FUN_00442ef0 was initialized (the first ACS sample).
+			loc26SetLayerFrame(t.layer, t.initialFrame)
+		} else {
+			loc26SetLayerFrame(t.layer, int(sample))
+		}
+	}
+
+	if t.handle == nil || !t.handle.IsPlaying() {
+		if t.layer != nil {
+			// FUN_00446560 mode 0x0c restores param_5 after speech; S93
+			// passes 10 for both dragon lines.
+			loc26SetLayerFrame(t.layer, t.fallbackFrame)
+			t.layer.Accumulator = 0
+			t.layer.Playing = false
+			t.layer.TaskDriven = false
+		}
+		t.ctx.session.currentSubtitle = ""
+		return true
+	}
+	return false
+}
+
+func loc26SetLayerFrame(layer *engine.Layer, frame int) {
+	if layer == nil || frame < 0 {
+		return
+	}
+	if layer.Source != nil && frame >= layer.Source.Frames() {
+		return
+	}
+	layer.Frame = frame
 }
 
 func loc26LoopLayer(ctx *Context, id string) engine.Task {
@@ -62,6 +175,21 @@ func loc26LoopLayer(ctx *Context, id string) engine.Task {
 
 func loc26ShowDragon(ctx *Context) engine.Task {
 	return engine.Sequence(
+		engine.Immediate(func() {
+			// The original landing/takeoff animations use one-shot mode 10,
+			// which removes the transition layer when playback finishes. Keep
+			// that exact stable-state behavior here so a stale final frame can
+			// never remain visible beside S93_DragonBreath.
+			for _, id := range []string{"S93_DragonLanding", "S93_DragonTakeoff"} {
+				if layer, ok := ctx.layer(id); ok {
+					layer.Visible = false
+					layer.Enabled = false
+					layer.Playing = false
+					layer.TaskDriven = false
+					layer.Accumulator = 0
+				}
+			}
+		}),
 		ctx.FreezeLayer("S93_DragonBreath", 10),
 		ctx.ShowLayer("S93_DragonBreath"),
 	)
@@ -407,13 +535,23 @@ func (t *loc26DragonAmbient) Update(dt float64) bool {
 	if t.wait > 0 {
 		return false
 	}
-	if layer, ok := t.ctx.layer("S93_DragonBreath"); ok && !layer.TaskDriven {
-		t.wait = float64(10 + rand.IntN(11))
-		t.inner = engine.Sequence(
-			t.ctx.PlayLayerFrames("S93_DragonBreath", 1, 10),
-			t.ctx.FreezeLayer("S93_DragonBreath", 10),
-		)
-		return t.inner.Update(dt)
+	if layer, ok := t.ctx.layer("S93_DragonBreath"); ok {
+		// The original stops the dragon ambient timer before takeoff.  In this
+		// reimplementation the ambient task remains registered until the scene
+		// change completes, so never let it restart the hidden breath layer
+		// during the takeoff handoff.
+		if !layer.Visible {
+			t.wait = float64(10 + rand.IntN(11))
+			return false
+		}
+		if !layer.TaskDriven {
+			t.wait = float64(10 + rand.IntN(11))
+			t.inner = engine.Sequence(
+				t.ctx.PlayLayerFrames("S93_DragonBreath", 1, 10),
+				t.ctx.FreezeLayer("S93_DragonBreath", 10),
+			)
+			return t.inner.Update(dt)
+		}
 	}
 	t.wait = float64(10 + rand.IntN(11))
 	return false

@@ -81,12 +81,18 @@ func loc08Enter99(ctx *Context, from string) engine.Task {
 					ctx.HideActor(actor),
 					loc08PlayAction(ctx, "RodReinCam"),
 					ctx.ShowActor(actor),
-					ctx.PlaceActorPerspective(actor, 0x274, 0xfc),
-					ctx.WalkToFacingPerspective(actor, 0x21a, 0x126, 2),
 				)
 			}
 		case 1, 2, 3:
 			tasks = append(tasks, loc08PoseSab(ctx, stage))
+		}
+		// Original S99 entry applies this spawn/walk to every entry except S100,
+		// independent of the harbour/Sab state.
+		if actor != "" {
+			tasks = append(tasks,
+				ctx.PlaceActorPerspective(actor, 0x274, 0xfc),
+				ctx.WalkToFacingPerspective(actor, 0x21a, 0x126, 2),
+			)
 		}
 	}
 	tasks = append(tasks, ctx.RunAmbient(&loc08Ambient{ctx: ctx}))
@@ -423,12 +429,83 @@ func loc08ShowClickableLayer(ctx *Context, id string) engine.Task {
 	return engine.Sequence(ctx.ShowLayer(id), ctx.MakeLayerClickable(id))
 }
 
+// loc08SabSpeechTask reproduces the original SabStand speech binding for
+// Location 8: the unknown lady talks only inside the authored 4..7 range.
+// Keeping this scene-local avoids stepping into the adjacent stand/turn pose.
+type loc08SabSpeechTask struct {
+	ctx         *Context
+	line        string
+	layer       *engine.Layer
+	voice       engine.Task
+	started     bool
+	accumulator float64
+	prevFrame   int
+	prevPlaying bool
+	prevDriven  bool
+	prevVisible bool
+	prevEnabled bool
+}
+
+func (t *loc08SabSpeechTask) Update(dt float64) bool {
+	if !t.started {
+		t.started = true
+		t.voice = t.ctx.PlayVoiceover(t.line, "")
+		if layer, ok := t.ctx.layer("SabStand"); ok {
+			t.layer = layer
+			t.prevFrame = layer.Frame
+			t.prevPlaying = layer.Playing
+			t.prevDriven = layer.TaskDriven
+			t.prevVisible = layer.Visible
+			t.prevEnabled = layer.Enabled
+			layer.Visible = true
+			layer.Enabled = true
+			layer.Playing = false
+			layer.TaskDriven = true
+			layer.Frame = 4
+			layer.Accumulator = 0
+		}
+	}
+
+	if t.layer != nil {
+		fps := t.layer.FPS
+		if fps <= 0 {
+			fps = 20
+		}
+		t.accumulator += dt
+		frameDuration := 1.0 / float64(fps)
+		for t.accumulator >= frameDuration {
+			t.accumulator -= frameDuration
+			t.layer.Frame++
+			if t.layer.Frame > 7 || t.layer.Frame < 4 {
+				t.layer.Frame = 4
+			}
+		}
+	}
+
+	if t.voice != nil && t.voice.Update(dt) {
+		if t.layer != nil {
+			t.layer.Frame = t.prevFrame
+			t.layer.Accumulator = 0
+			t.layer.Playing = t.prevPlaying
+			t.layer.TaskDriven = t.prevDriven
+			t.layer.Visible = t.prevVisible
+			t.layer.Enabled = t.prevEnabled
+		}
+		return true
+	}
+	return false
+}
+
+func loc08SabSpeech(ctx *Context, line string) engine.Task {
+	return &loc08SabSpeechTask{ctx: ctx, line: line}
+}
+
 func loc08PoseSab100(ctx *Context) engine.Task {
 	return engine.Sequence(loc08SetLayerTransform(ctx, "SabStand", 346, 149, 167, 48), ctx.ShowLayer("SabStand"), ctx.FreezeLayer("SabStand", 3), loc08MakeSabClickable(ctx))
 }
 
 func loc08Sab100(ctx *Context, line string) engine.Task {
-	return engine.Sequence(ctx.ShowLayer("SabStand"), ctx.PlaySpeechBoundToLayer("SabStand", line, "", 3, 7))
+	return engine.Sequence(ctx.ShowLayer("SabStand"), loc08SabSpeech(ctx, line))
 }
 
 func loc08BoatInteraction(ctx *Context, actor string) engine.Task {
@@ -453,8 +530,7 @@ func loc08BoatInteraction(ctx *Context, actor string) engine.Task {
 		loc08SetLayerTransform(ctx, "SabWalk", 346, 149, 167, 48),
 		ctx.ShowLayer("SabWalk"),
 		engine.Parallel(
-			loc08TweenLayer(ctx, "SabWalk", 344, 146, 119, 57, 10, true, true, true, true),
-			ctx.PlayLayerFrames("SabWalk", 0x0b, 0x17),
+			loc08WalkTween(ctx, "SabWalk", 344, 146, 119, 57, 10, 0x0b, 0x17),
 			ctx.PlayLayerFrames("BoatAway", 0x19, 0x23),
 		),
 		ctx.HideLayer("SabWalk"),
@@ -642,7 +718,7 @@ func loc08Gang(ctx *Context, actor string) engine.Task {
 }
 
 func loc08Sab(ctx *Context, line string) engine.Task {
-	return engine.Sequence(ctx.ShowLayer("SabStand"), ctx.PlaySpeechBoundToLayer("SabStand", line, "", 3, 7))
+	return engine.Sequence(ctx.ShowLayer("SabStand"), loc08SabSpeech(ctx, line))
 }
 
 func loc08PoseSab(ctx *Context, stage int) engine.Task {
@@ -761,6 +837,71 @@ func (t *loc08LayerTween) Update(dt float64) bool {
 		layer.Zoom = t.startZoom + int(float64(t.targetZoom-t.startZoom)*p)
 	}
 	return p >= 1
+}
+
+type loc08WalkTweenTask struct {
+	ctx                                   *Context
+	id                                    string
+	targetX, targetY, targetZ, targetZoom int
+	steps                                 int
+	startFrame, endFrame                  int
+	started                               bool
+	startX, startY, startZ, startZoom     int
+	elapsed                               float64
+}
+
+func (t *loc08WalkTweenTask) Update(dt float64) bool {
+	layer, ok := t.ctx.layer(t.id)
+	if !ok {
+		return true
+	}
+	if !t.started {
+		t.started = true
+		t.startX, t.startY, t.startZ, t.startZoom = layer.X, layer.Y, layer.Z, layer.Zoom
+		layer.Visible = true
+		layer.Enabled = true
+		layer.Playing = false
+		layer.TaskDriven = true
+		layer.Frame = t.startFrame
+		layer.Accumulator = 0
+	}
+
+	// The original mode 0x0D keeps the authored walk range advancing through
+	// the normal sprite animation machinery while the transform tween runs.
+	// Use AdvanceScripted rather than assigning frames ourselves so AVI/frame
+	// timing and frame-entry events behave exactly like other scripted layers.
+	layer.Playing = true
+	layer.Mode = engine.AnimOnce
+	layer.AdvanceScripted(dt)
+	if layer.Frame > t.endFrame || layer.Frame < t.startFrame {
+		layer.Frame = t.startFrame
+		layer.Accumulator = 0
+	}
+
+	if t.steps <= 0 {
+		layer.X, layer.Y, layer.Z, layer.Zoom = t.targetX, t.targetY, t.targetZ, t.targetZoom
+		return true
+	}
+	t.elapsed += dt
+	p := t.elapsed / (float64(t.steps) / 20.0)
+	if p > 1 {
+		p = 1
+	}
+	layer.X = t.startX + int(float64(t.targetX-t.startX)*p)
+	layer.Y = t.startY + int(float64(t.targetY-t.startY)*p)
+	layer.Z = t.startZ + int(float64(t.targetZ-t.startZ)*p)
+	layer.Zoom = t.startZoom + int(float64(t.targetZoom-t.startZoom)*p)
+	if p >= 1 {
+		layer.Playing = false
+		layer.TaskDriven = false
+		layer.Accumulator = 0
+		return true
+	}
+	return false
+}
+
+func loc08WalkTween(ctx *Context, id string, x, y, z, zoom, steps, startFrame, endFrame int) engine.Task {
+	return &loc08WalkTweenTask{ctx: ctx, id: id, targetX: x, targetY: y, targetZ: z, targetZoom: zoom, steps: steps, startFrame: startFrame, endFrame: endFrame}
 }
 
 func loc08SetOriginal(ctx *Context, offset, value int) engine.Task {
