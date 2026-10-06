@@ -24,10 +24,78 @@ func loc20SetOriginal(ctx *Context, off, value int) engine.Task {
 	return engine.Immediate(func() { putOriginalFlag(ctx.session.state.OriginalState, off, value) })
 }
 
+type loc20SpeechRangeTask struct {
+	ctx         *Context
+	id          string
+	line        string
+	start       int
+	end         int
+	layer       *engine.Layer
+	voice       engine.Task
+	started     bool
+	accumulator float64
+	prevFrame   int
+	prevPlaying bool
+	prevDriven  bool
+	prevVisible bool
+	prevEnabled bool
+}
+
+func (t *loc20SpeechRangeTask) Update(dt float64) bool {
+	if !t.started {
+		t.started = true
+		t.voice = t.ctx.PlayVoiceover(t.line, "["+t.line+"]")
+		if layer, ok := t.ctx.layer(t.id); ok {
+			t.layer = layer
+			t.prevFrame = layer.Frame
+			t.prevPlaying = layer.Playing
+			t.prevDriven = layer.TaskDriven
+			t.prevVisible = layer.Visible
+			t.prevEnabled = layer.Enabled
+			layer.Visible = true
+			layer.Enabled = true
+			layer.Playing = false
+			layer.TaskDriven = true
+			layer.Frame = t.start
+			layer.Accumulator = 0
+		}
+	}
+	if t.layer != nil && t.end > t.start {
+		fps := t.layer.FPS
+		if fps <= 0 {
+			fps = 20
+		}
+		t.accumulator += dt
+		frameDuration := 1.0 / float64(fps)
+		for t.accumulator >= frameDuration {
+			t.accumulator -= frameDuration
+			t.layer.Frame++
+			if t.layer.Frame > t.end || t.layer.Frame < t.start {
+				t.layer.Frame = t.start
+			}
+		}
+	}
+	if t.voice != nil && t.voice.Update(dt) {
+		if t.layer != nil {
+			t.layer.Frame = t.prevFrame
+			t.layer.Accumulator = 0
+			t.layer.Playing = t.prevPlaying
+			t.layer.TaskDriven = t.prevDriven
+			t.layer.Visible = t.prevVisible
+			t.layer.Enabled = t.prevEnabled
+		}
+		return true
+	}
+	return false
+}
+
 func loc20LayerSpeech(ctx *Context, id, line string, from, to int) engine.Task {
 	start := from
 	if start > 0 {
 		start--
+	}
+	if id == "S70_Tharain" {
+		return &loc20SpeechRangeTask{ctx: ctx, id: id, line: line, start: start, end: to}
 	}
 	return ctx.PlaySpeechBoundToLayer(id, line, "["+line+"]", start, to)
 }
@@ -74,6 +142,28 @@ func loc20PlayRangeHide(ctx *Context, id string, from, to int) engine.Task {
 	)
 }
 
+func loc20PrioritizeAreas(ctx *Context, ids ...string) engine.Task {
+	return engine.Immediate(func() {
+		if ctx.session.scene == nil || len(ids) == 0 {
+			return
+		}
+		wanted := make(map[string]bool, len(ids))
+		order := make([]string, 0, len(ctx.session.scene.AreaOrder))
+		for _, id := range ids {
+			if _, ok := ctx.session.scene.Areas[id]; ok && !wanted[id] {
+				wanted[id] = true
+				order = append(order, id)
+			}
+		}
+		for _, id := range ctx.session.scene.AreaOrder {
+			if !wanted[id] {
+				order = append(order, id)
+			}
+		}
+		ctx.session.scene.AreaOrder = order
+	})
+}
+
 func (LOC20Controller) LoadConditionMask(ctx *Context, scene string) int {
 	if normalizeLocationSceneID(20, scene) == "S70" && loc20Original(ctx, loc20StateStoneTaken) == 0 {
 		return 1
@@ -118,9 +208,9 @@ func (LOC20Controller) Enter(ctx *Context, scene, from string) engine.Task {
 			ctx.MakeLayerClickable("S70_Pult"),
 		)
 		if loc20Original(ctx, loc20StateTalk) < 6 {
-			tasks = append(tasks, ctx.MakeLayerClickable("S70_Stone"))
+			tasks = append(tasks, ctx.MakeLayerClickable("S70_Stone"), loc20PrioritizeAreas(ctx, "S70_Stone", "S70_Book", "S70_Pult", "S70_Tharain"))
 		} else {
-			tasks = append(tasks, ctx.HideLayer("S70_Stone"), ctx.FreezeLayer("S70_Stone", 0))
+			tasks = append(tasks, ctx.HideLayer("S70_Stone"), ctx.FreezeLayer("S70_Stone", 0), loc20PrioritizeAreas(ctx, "S70_Book", "S70_Pult", "S70_Tharain"))
 		}
 	}
 	if ctx.session.state.PreviousLocation != 20 || loc19SceneID(from) == "S69" {
@@ -198,8 +288,9 @@ func loc20Talk(ctx *Context, actor string) engine.Task {
 		return engine.Sequence(append(base,
 			ctx.Say(actor, "070_ROD_08", "[070_ROD_08]"),
 			loc20LayerSpeech(ctx, "S70_Tharain", "070_THA_08", 0xf, 0x2d),
+			ctx.DisableArea("S70_Stone"),
 			ctx.HideLayer("S70_Stone"),
-			ctx.RunAmbient(loc20PlayHide(ctx, "S70_ThaTakesStone")),
+			loc20PlayHide(ctx, "S70_ThaTakesStone"),
 			ctx.PlayLayerFrames("S70_Tharain", 0, 0xe),
 			ctx.ShowLayer("S70_StoneFlies"),
 			loc20SetOriginal(ctx, loc20StateTalk, 6),

@@ -46,6 +46,13 @@ func (LOC10Controller) Enter(ctx *Context, scene, from string) engine.Task {
 			loc10PrepareScene(ctx, scene)
 		}
 		loc10SyncJasminActor(ctx)
+		if scene != "S66" && loc10Original(ctx, loc10StateNight) != 0 && actor != "" {
+			if a, ok := ctx.session.scene.Characters[actor]; ok {
+				a.Color.R = -122
+				a.Color.G = -84
+				a.Color.B = -24
+			}
+		}
 	})}
 	music := "Loc10_ForestBeforeDarkness.wav"
 	if loc10Original(ctx, loc10StateNight) != 0 {

@@ -276,6 +276,15 @@ func loc19Enter101(ctx *Context, from string) engine.Task {
 		ctx.PlayMusic("Loc10_ForestInDarkness.wav"),
 		ctx.HideActor(jas),
 		ctx.ShowActor(actor),
+		engine.Immediate(func() {
+			if actor != "" {
+				if a, ok := ctx.session.scene.Characters[actor]; ok {
+					a.Color.R = -122
+					a.Color.G = -84
+					a.Color.B = -24
+				}
+			}
+		}),
 		ctx.EnableArea("S68_To67"),
 		ctx.DisableArea("S68_To69"),
 		ctx.DisableArea("S101_To69"),
