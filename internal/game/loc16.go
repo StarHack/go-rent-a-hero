@@ -228,7 +228,7 @@ func loc16DragonClick(ctx *Context, actor string) engine.Task {
 			return engine.Sequence(move, ctx.PlayVoiceover("058_ROD_07", ""), ctx.HideActor(actor), ctx.ShowLayer("S58_RodAngriff"), ctx.PlayLayerFrames("S58_RodAngriff", 0, 4), ctx.PlaySFX("Sfx_Woosh.wav"), ctx.PlayLayerFrames("S58_RodAngriff", 5, 10), loc16DragonVoice(ctx, "058_DRA_07", 0, 8), ctx.PlayLayerFrames("S58_RodAngriff", 11, -1), ctx.HideLayer("S58_RodAngriff"), ctx.ShowActor(actor), loc15SetOriginal(ctx, loc16StateDragonStage, 2))
 		}
 		if stage == 9 {
-			return engine.Sequence(move, loc16DragonReturn(ctx, false), ctx.PlayVoiceover("058_ROD_15", ""), loc16DragonPosedVoice(ctx, "058_DRA_15", 4, 0x6e, 0x76), loc16DragonReturn(ctx, false), loc15SetOriginal(ctx, loc16StateCanExit59, 1), loc16ConfigureDragonAccess(ctx), ctx.WalkToFacingPerspective(actor, 500, 0xda, 4), ctx.ChangeLocation(17, "59"))
+			return engine.Sequence(move, loc16DragonReturn(ctx, false), ctx.PlayVoiceover("058_ROD_15", ""), loc16DragonPosedVoice(ctx, "058_DRA_15", 4, 0x6e, 0x76), loc16DragonReturn(ctx, false), loc15SetOriginal(ctx, loc16StateCanExit59, 1), loc16ConfigureDragonAccess(ctx), ctx.WalkToFacingPerspective(actor, 500, 0xda, 4), loc15SetOriginal(ctx, loc16StateDragonStage, 10), ctx.ChangeLocation(17, "59"))
 		}
 		rod := fmt.Sprintf("058_ROD_%02d", stage+6)
 		dra := fmt.Sprintf("058_DRA_%02d", stage+6)
