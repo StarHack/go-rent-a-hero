@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/binary"
+	"math"
 	"math/rand/v2"
 	"strings"
 
@@ -41,10 +42,6 @@ func (LOC10Controller) Enter(ctx *Context, scene, from string) engine.Task {
 		loc10PrepareScene(ctx, scene)
 	}
 	tasks := []engine.Task{engine.Immediate(func() {
-		if a, ok := ctx.session.scene.Characters[actor]; ok {
-			a.StepLeft = "Gen_StepLeft.wav"
-			a.StepRight = "Gen_StepRight.wav"
-		}
 		if scene != "S40" {
 			loc10PrepareScene(ctx, scene)
 		}
@@ -299,7 +296,7 @@ func loc10Enter37(ctx *Context, actor, from string) engine.Task {
 	from = loc10SceneID(from)
 	if from == "S113" || ctx.session.state.PreviousLocation == 31 {
 		loc10SetOriginal(ctx, loc10StateGlider, 1)
-		return engine.Sequence(ctx.HideActor(actor), ctx.PlaySFX("Sfx_Glider_PassingBy.wav"), loc10PlayLayerDeferred(ctx, "S37_GliderArrives"), ctx.PlaceActorPerspective(actor, 0xfa, 0xc5), ctx.ShowActor(actor), ctx.WalkToFacingPerspective(actor, 0xfa, 200, 0), loc10ShowGlider(ctx))
+		return engine.Sequence(ctx.HideActor(actor), ctx.HideLayer("S37_Glider"), ctx.PlaySFXVolume("Sfx_Glider_PassingBy.wav", 0x19), loc10PlayLayerFramesDeferred(ctx, "S37_GliderArrives", 0, -1), ctx.HideLayer("S37_GliderArrives"), ctx.PlaceActorPerspective(actor, 0xfa, 0xc5), ctx.ShowActor(actor), ctx.WalkToFacingPerspective(actor, 0xfa, 200, 0), loc10ShowGlider(ctx))
 	}
 	if from == "S66" {
 		loc10SetOriginal(ctx, loc10StateWald, 1)
@@ -356,7 +353,7 @@ func loc10Enter37(ctx *Context, actor, from string) engine.Task {
 }
 
 func loc10ShowGlider(ctx *Context) engine.Task {
-	return engine.Sequence(ctx.ShowLayer("S37_Glider"), ctx.MakeLayerClickable("S37_Glider"))
+	return engine.Sequence(ctx.ShowLayer("S37_Glider"), ctx.MakeLayerClickable("S37_Glider"), ctx.RunAmbient(&loc10GliderIdle{ctx: ctx}))
 }
 func loc10Enter38(ctx *Context, actor, from string) engine.Task {
 	from = loc10SceneID(from)
@@ -563,7 +560,7 @@ func loc10Leave37ByGlider(ctx *Context, actor string) engine.Task {
 	if loc10Original(ctx, loc10StateGlider) == 0 {
 		return nil
 	}
-	return engine.Sequence(ctx.WalkToFacingPerspective(actor, 0xfa, 0xc5, 4), ctx.HideActor(actor), loc10PlayLayerFramesDeferred(ctx, "S37_GliderLeaves", 0, 0x2a), ctx.PlaySFX("Sfx_Glider_PassingBy.wav"), loc10PlayLayerFramesDeferred(ctx, "S37_GliderLeaves", 0x2b, -1), engine.Immediate(func() { loc10SetOriginal(ctx, loc10StateGlider, 0) }), ctx.ChangeLocation(1, "8"))
+	return engine.Sequence(ctx.WalkToFacingPerspective(actor, 0xfa, 0xc5, 4), ctx.HideLayer("S37_Glider"), ctx.HideActor(actor), loc10PlayLayerFramesDeferred(ctx, "S37_GliderLeaves", 0, 0x2a), ctx.PlaySFXVolume("Sfx_Glider_PassingBy.wav", 0x19), loc10PlayLayerFramesDeferred(ctx, "S37_GliderLeaves", 0x2b, -1), engine.Immediate(func() { loc10SetOriginal(ctx, loc10StateGlider, 0) }), ctx.ChangeLocation(1, "8"))
 }
 func loc10GirlTalk(ctx *Context, actor string) engine.Task {
 	s := loc10Original(ctx, loc10StateGirlTalk)
@@ -1148,7 +1145,9 @@ func loc10PrepareScene(ctx *Context, scene string) {
 	switch scene {
 	case "S37":
 		hide("S37_RodFallDown", "S37_JasFallDown", "S37_JasPointN", "S37_GliderArrives", "S37_Glider", "S37_GliderLeaves")
-		if loc10Original(ctx, loc10StateGlider) != 0 {
+		from := loc10SceneID(ctx.session.state.PreviousScene)
+		arrivingByGlider := from == "S113" || ctx.session.state.PreviousLocation == 31
+		if loc10Original(ctx, loc10StateGlider) != 0 && !arrivingByGlider {
 			show("S37_Glider")
 		}
 	case "S38":
@@ -1340,6 +1339,41 @@ func itoa10(n int) string {
 		return string(rune('0' + n))
 	}
 	return string([]byte{byte('0' + n/10), byte('0' + n%10)})
+}
+
+type loc10GliderIdle struct {
+	ctx         *Context
+	initialized bool
+	baseX       int
+	baseY       int
+	phase       float64
+	accumulator float64
+}
+
+func (t *loc10GliderIdle) Update(dt float64) bool {
+	if t.ctx.session.state.Location != 10 || t.ctx.session.state.Scene != "S37" || loc10Original(t.ctx, loc10StateGlider) == 0 {
+		return true
+	}
+	layer, ok := t.ctx.layer("S37_Glider")
+	if !ok {
+		return true
+	}
+	if !t.initialized {
+		t.baseX = layer.X
+		t.baseY = layer.Y
+		t.initialized = true
+	}
+	t.accumulator += dt
+	for t.accumulator >= 0.04 {
+		t.accumulator -= 0.04
+		t.phase += 0.1
+		if t.phase >= 2*math.Pi {
+			t.phase -= 2 * math.Pi
+		}
+	}
+	layer.X = t.baseX
+	layer.Y = t.baseY - int(math.Round(math.Sin(t.phase)))
+	return false
 }
 
 type loc10Ambient struct {
