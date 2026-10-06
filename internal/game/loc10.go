@@ -1092,7 +1092,10 @@ func loc10Slug(ctx *Context, actor string) engine.Task {
 		ctx.HideLayer("S44_SlugExplodes"),
 		ctx.ShowLayer("S44_Leaf"),
 		ctx.MakeLayerClickable("S44_Leaf"),
-		engine.Immediate(func() { loc10SetOriginal(ctx, loc10StateLeafReady, 1) }),
+		engine.Immediate(func() {
+			loc10SetOriginal(ctx, loc10StateLeafReady, 1)
+			loc10PrioritizeArea(ctx, "S44_Leaf")
+		}),
 		ctx.HideLayer("S44_RodTakesLeaf"),
 		ctx.ShowActor(actor),
 		ctx.Say(actor, "044_ROD_03", "[044_ROD_03]"),
@@ -1199,12 +1202,34 @@ func loc10PrepareScene(ctx *Context, scene string) {
 		}
 	case "S44":
 		hide("S44_RodTakesLeaf", "S44_SlugExplodes", "S44_Leaf")
-		if loc10Original(ctx, loc10StateLeaf) != 0 {
+		leafReady := loc10Original(ctx, loc10StateLeaf) != 0 && loc10Original(ctx, loc10StateLeafReady) != 0
+		if leafReady {
 			show("S44_Leaf")
+			ctx.MakeLayerClickable("S44_Leaf").Update(0)
+			loc10PrioritizeArea(ctx, "S44_Leaf")
+		} else if area, ok := ctx.session.scene.Areas["S44_Leaf"]; ok {
+			area.Enabled = false
 		}
 	case "S66":
 		hide("S66_WoodChase")
 	}
+}
+
+func loc10PrioritizeArea(ctx *Context, id string) {
+	if ctx.session.scene == nil {
+		return
+	}
+	if _, ok := ctx.session.scene.Areas[id]; !ok {
+		return
+	}
+	order := make([]string, 0, len(ctx.session.scene.AreaOrder))
+	order = append(order, id)
+	for _, areaID := range ctx.session.scene.AreaOrder {
+		if areaID != id {
+			order = append(order, areaID)
+		}
+	}
+	ctx.session.scene.AreaOrder = order
 }
 
 func loc10WalkScene(ctx *Context, actor string, x, y float64, d int, scene string) engine.Task {

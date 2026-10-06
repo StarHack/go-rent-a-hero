@@ -49,6 +49,10 @@ func loc17Initialize(ctx *Context, scene int) engine.Task {
 					layer.ColorKeyed = false
 				}
 			}
+			loc17AddFrameSFX(ctx, "S60_RodRaus", 0x2c, "Sfx_Knock_Wet.wav", 70)
+			loc17AddFrameSFX(ctx, "S60_Spritz", 5, "Sfx_TableHit.wav", 100)
+			loc17AddFrameSFX(ctx, "S60_Spritz", 9, "Sfx_OOh.wav", 100)
+			loc17AddFrameSFX(ctx, "S60_Spritz", 0x0c, "Sfx_Platzen.wav", 100)
 		}
 		ids := []string{"Aasfresser1", "Aasfresser2", "Aasfresser3", "Aasfresser4", "Aasfresser5", "Aasfresser6", "Aasfresser7", "S60_BuschWeg", "S60_Busch", "S60_BlattLU", "S60_BlattRO", "S60_Licht", "S60_Spritz", "S60_RodRaus", "S60_TryOpenSkullMitBusch", "S60_TryOpenSkullOhneBusch"}
 		for i, id := range ids {
@@ -64,6 +68,20 @@ func loc17Initialize(ctx *Context, scene int) engine.Task {
 				l.Accumulator = 0
 			}
 		}
+	})
+}
+
+func loc17AddFrameSFX(ctx *Context, layerID string, frame int, name string, volume int) {
+	layer, ok := ctx.layer(layerID)
+	if !ok || len(layer.FrameEvents[frame]) != 0 {
+		return
+	}
+	layer.AddFrameEvent(frame, func() {
+		if volume == 100 {
+			_ = ctx.PlaySFX(name).Update(0)
+			return
+		}
+		_ = ctx.PlaySFXVolume(name, volume).Update(0)
 	})
 }
 
