@@ -601,11 +601,14 @@ func loc10GirlTalk(ctx *Context, actor string) engine.Task {
 	case 6:
 		return engine.Sequence(append(base,
 			ctx.HideLayer("S38_GirlJumps"),
+			ctx.HideActor(actor),
 			loc10PlayLayerFramesDeferred(ctx, "S38_RodStealsRope", 0, 0x2b),
 			ctx.PlaySFX("Sfx_Knock_Wet.wav"),
 			ctx.PlayVoiceover("038_ROD_07", "[038_ROD_07]"),
 			loc10PlayLayerFramesDeferred(ctx, "S38_RodStealsRope", 0x2c, -1),
+			ctx.HideLayer("S38_RodStealsRope"),
 			ctx.ShowLayer("S38_GirlJumps"),
+			ctx.ShowActor(actor),
 			ctx.Say(actor, "038_ROD_11", "[038_ROD_11]"),
 		)...)
 	}
