@@ -88,6 +88,22 @@ func loc19ShowStatic(ctx *Context, id string, frame int) engine.Task {
 	return engine.Sequence(ctx.FreezeLayer(id, loc19FrameStart(frame)), ctx.ShowLayer(id))
 }
 
+func loc19PutTharaenBehindDoor(ctx *Context) engine.Task {
+	return engine.Immediate(func() {
+		door, ok := ctx.layer("S69_Tuer")
+		if !ok {
+			return
+		}
+		z := door.Z + 1
+		if layer, ok := ctx.layer("S69_ThaWalk"); ok {
+			layer.Z = z
+		}
+		if layer, ok := ctx.layer("S69_ThaTalk"); ok {
+			layer.Z = z
+		}
+	})
+}
+
 func loc19SetLayerState(ctx *Context, id string, x, y, z, zoom, frame int) engine.Task {
 	return engine.Immediate(func() {
 		if layer, ok := ctx.layer(id); ok {
@@ -290,6 +306,7 @@ func loc19Enter69(ctx *Context, from string) engine.Task {
 		ctx.ShowActor(actor),
 		ctx.HideActor(jas),
 		loc19Dormant69(ctx),
+		loc19PutTharaenBehindDoor(ctx),
 		loc19ShowStatic(ctx, "S69_Tuer", 0),
 		loc19ShowStatic(ctx, "S69_Wache", 0),
 		ctx.EnableArea("S69_To68"),
@@ -367,7 +384,7 @@ func loc19Enter69From68(ctx *Context, actor string) engine.Task {
 		ctx.ShowActor(jas),
 		ctx.PlaceActorPerspective(actor, 0x277, 0xf4),
 		ctx.PlaceActorPerspective(jas, 0x277, 0xf4),
-		ctx.RunAmbient(ctx.WalkToFacingPerspective(jas, 0x218, 0x108, 5)),
+		ctx.RunAmbient(ctx.WalkToPerspective(jas, 0x218, 0x108)),
 		ctx.WalkToFacingPerspective(actor, 0x22e, 0x104, 2),
 		ctx.PlayVoiceover("069_ZW2_01", "[069_ZW2_01]"),
 		loc19Range(ctx, "S69_Wache", 0, 0x12),
@@ -505,7 +522,10 @@ func loc19Leave69To68(ctx *Context, actor string) engine.Task {
 		ctx.PlayLayer("S69_Tuer"),
 		loc19LayerSpeech(ctx, "S69_Wache", "069_ZW2_04", 0, 4),
 		ctx.Say(actor, "069_ROD_05", "[069_ROD_05]"),
+		ctx.HideLayer("S69_ThaWalk"),
 		loc19LayerSpeech(ctx, "S69_ThaTalk", "069_THA_05", 0, 8),
+		ctx.HideLayer("S69_ThaTalk"),
+		loc19Range(ctx, "S69_ThaWalk", 0xb, 0x19),
 		loc19SetOriginal(ctx, loc19StateTo70, 1),
 		loc19SetOriginal(ctx, loc19StateJasVisible, 0),
 		loc19SetOriginal(ctx, loc19StateRamPose, -1),
@@ -716,6 +736,7 @@ func loc19NecklaceFinale(ctx *Context, actor string) engine.Task {
 		loc19LayerSpeech(ctx, "S69_RamTalkAnim", "069_RAM_21", 0xe, 0x12),
 		loc19Range(ctx, "S69_RamTalkAnim", 0xd, 6),
 		loc19SetLayerState(ctx, "S69_ThaWalk", 288, 196, 93, 65, 0),
+		loc19PutTharaenBehindDoor(ctx),
 		ctx.PlaySFX("Sfx_Door_Creaking_Medium.wav"),
 		ctx.RunAmbient(ctx.PlayLayer("S69_Tuer")),
 		ctx.PlayVoiceover("069_THA_21", "[069_THA_21]"),
