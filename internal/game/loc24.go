@@ -141,6 +141,7 @@ func (t *loc24WaitFrame) Update(float64) bool {
 
 type loc24FightLoop struct {
 	ctx     *Context
+	scene   *engine.Scene
 	main    engine.Task
 	aux     []engine.Task
 	started bool
@@ -198,7 +199,7 @@ func (t *loc24FightLoop) startState(state int) {
 }
 
 func (t *loc24FightLoop) Update(dt float64) bool {
-	if loc24SceneID(t.ctx.session.state.Scene) != "S103" {
+	if t.ctx.session.scene != t.scene || loc24SceneID(t.ctx.session.state.Scene) != "S103" {
 		return true
 	}
 	if !t.started {
@@ -236,12 +237,13 @@ func (t *loc24FightLoop) Update(dt float64) bool {
 }
 
 type loc24Ambient struct {
-	ctx  *Context
-	wait float64
+	ctx   *Context
+	scene *engine.Scene
+	wait  float64
 }
 
 func (t *loc24Ambient) Update(dt float64) bool {
-	if loc24SceneID(t.ctx.session.state.Scene) != "S103" {
+	if t.ctx.session.scene != t.scene || loc24SceneID(t.ctx.session.state.Scene) != "S103" {
 		return true
 	}
 	if t.wait <= 0 {
@@ -323,6 +325,9 @@ func (LOC24Controller) Enter(ctx *Context, scene, from string) engine.Task {
 		ctx.PlayMusic("Loc23_PirateShip.wav"),
 		ctx.ShowLayer("S103_Tisch"),
 		loc08LoopLayer(ctx, "Gen_SmallSteam"),
+		// The original does not assign event 4 to S103_To102 until the
+		// opening S103 sequence (CAP_01 / SAB_01 / first attack) has finished.
+		ctx.DisableArea("S103_To102"),
 	}
 	if !ctx.HasItem(0x18) {
 		tasks = append(tasks, ctx.ShowLayer("S103_Flasche"))
@@ -337,6 +342,12 @@ func (LOC24Controller) Enter(ctx *Context, scene, from string) engine.Task {
 			tasks = append(tasks, ctx.ShowActor(actor))
 		}
 	}
+	// Match the original event wiring: S103_To102 becomes clickable only
+	// after the initial arrival/dialogue sequence has completed. On a loaded
+	// save the intro is skipped, so this is reached immediately, just as in
+	// the original.
+	tasks = append(tasks, ctx.EnableArea("S103_To102"))
+
 	if loc24Original(ctx, loc24StateFightSpeed) != 0 {
 		tasks = append(tasks, engine.Immediate(func() {
 			for _, id := range []string{"S103_SabAttack2", "S103_SabDeckt1"} {
@@ -353,8 +364,8 @@ func (LOC24Controller) Enter(ctx *Context, scene, from string) engine.Task {
 	}
 	tasks = append(tasks,
 		loc24MakeClickables(ctx),
-		ctx.RunAmbient(&loc24FightLoop{ctx: ctx}),
-		ctx.RunAmbient(&loc24Ambient{ctx: ctx}),
+		ctx.RunAmbient(&loc24FightLoop{ctx: ctx, scene: ctx.session.scene}),
+		ctx.RunAmbient(&loc24Ambient{ctx: ctx, scene: ctx.session.scene}),
 	)
 	return engine.Sequence(tasks...)
 }

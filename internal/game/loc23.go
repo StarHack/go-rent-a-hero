@@ -209,10 +209,13 @@ func loc23MoveCrateRight(ctx *Context, actor string) engine.Task {
 		ctx.PlaceActorPerspective(actor, 0x1a7, 0x10a),
 		loc23SetOriginal(ctx, loc23StateCrate, 2),
 		ctx.PlayVoiceover("102_ROD_02", ""),
-		ctx.EnableArea("S102_To103"),
 	}
-	if loc23Original(ctx, loc23StateDoorOpen) == 0 {
-		tasks = append(tasks, ctx.MakeLayerClickable("S102_TuerZu"))
+	if loc23Original(ctx, loc23StateDoorOpen) != 0 {
+		tasks = append(tasks, ctx.EnableArea("S102_To103"))
+	} else {
+		// The original only exposes the closed-door interaction here.  The
+		// actual exit is enabled after Sabine finishes opening the door.
+		tasks = append(tasks, ctx.DisableArea("S102_To103"), ctx.MakeLayerClickable("S102_TuerZu"))
 	}
 	return engine.Sequence(tasks...)
 }
@@ -234,28 +237,111 @@ func loc23MoveCrateLeft(ctx *Context, actor string) engine.Task {
 	)
 }
 
+type loc23SabWalkMoveTask struct {
+	ctx                       *Context
+	targetX, targetY, targetZ int
+	targetZoom, steps         int
+	from, to                  int
+	started                   bool
+	elapsed                   float64
+	startX, startY, startZ    int
+	startZoom                 int
+}
+
+func loc23SabWalkMove(ctx *Context, x, y, z, zoom, steps, from, to int) engine.Task {
+	return &loc23SabWalkMoveTask{
+		ctx: ctx, targetX: x, targetY: y, targetZ: z, targetZoom: zoom,
+		steps: steps, from: from, to: to,
+	}
+}
+
+func (t *loc23SabWalkMoveTask) Update(dt float64) bool {
+	layer, ok := t.ctx.layer("SabWalk")
+	if !ok || layer == nil {
+		return true
+	}
+	if !t.started {
+		t.started = true
+		t.startX, t.startY, t.startZ, t.startZoom = layer.X, layer.Y, layer.Z, layer.Zoom
+		layer.Visible = true
+		layer.Enabled = true
+		layer.Mode = engine.AnimLoop
+		layer.Frame = t.from
+		layer.Accumulator = 0
+		layer.Playing = true
+		layer.TaskDriven = true
+	}
+
+	fps := layer.FPS
+	if fps <= 0 {
+		fps = 10
+	}
+	layer.Accumulator += dt
+	frameDuration := 1.0 / float64(fps)
+	for layer.Accumulator >= frameDuration {
+		layer.Accumulator -= frameDuration
+		next := layer.Frame + 1
+		if next > t.to {
+			next = t.from
+		}
+		layer.Frame = next
+	}
+
+	t.elapsed += dt
+	duration := float64(t.steps) / 20.0
+	if duration <= 0 {
+		duration = dt
+	}
+	progress := t.elapsed / duration
+	if progress > 1 {
+		progress = 1
+	}
+	layer.X = t.startX + int(float64(t.targetX-t.startX)*progress)
+	layer.Y = t.startY + int(float64(t.targetY-t.startY)*progress)
+	layer.Z = t.startZ + int(float64(t.targetZ-t.startZ)*progress)
+	layer.Zoom = t.startZoom + int(float64(t.targetZoom-t.startZoom)*progress)
+
+	if t.elapsed < duration {
+		return false
+	}
+	layer.X, layer.Y, layer.Z, layer.Zoom = t.targetX, t.targetY, t.targetZ, t.targetZoom
+	layer.Playing = false
+	layer.TaskDriven = false
+	return true
+}
+
 func loc23OpenCabinDoor(ctx *Context, actor string) engine.Task {
 	return engine.Sequence(
 		ctx.WalkToFacingPerspective(actor, 0x13b, 0x163, 7),
 		ctx.PlayVoiceover("102_SAB_03", ""),
-		ctx.HideActor(actor),
+
+		// Original SabWalk door approach.  The walk layer is continuously
+		// animated while its position/depth/scale changes over each authored
+		// movement segment.
 		ctx.ShowLayer("SabWalk"),
-		ctx.PlayLayerFrames("SabWalk", 0x30, 0x3b),
+		loc08SetLayerTransform(ctx, "SabWalk", 358, 151, 1, 238),
+		loc23SabWalkMove(ctx, 290, 140, 86, 151, 0x14, 0x30, 0x3b),
 		ctx.FreezeLayer("SabWalk", 0x3c),
-		ctx.PlayLayerFrames("SabWalk", 0x3c, 0x47),
-		ctx.PlayLayerFrames("SabWalk", 0x48, 0x53),
+		loc23SabWalkMove(ctx, 294, 109, 86, 121, 0x0f, 0x3c, 0x47),
+		loc23SabWalkMove(ctx, 339, 80, 142, 111, 10, 0x48, 0x53),
 		ctx.HideLayer("SabWalk"),
+
+		// The enter-door hotspot is still unavailable while the door is shut.
 		ctx.HideLayer("S102_TuerZu"),
+		ctx.DisableArea("S102_TuerZu"),
+		ctx.DisableArea("S102_To103"),
 		loc23PlayTransient(ctx, "S102_SabTuer"),
 		ctx.ShowLayer("S102_TuerOffen"),
+
 		ctx.ShowLayer("SabWalk"),
-		ctx.PlayLayerFrames("SabWalk", 0x18, 0x23),
-		ctx.PlayLayerFrames("SabWalk", 0x24, 0x2f),
+		loc23SabWalkMove(ctx, 311, 96, 86, 111, 10, 0x18, 0x23),
+		loc23SabWalkMove(ctx, 251, 96, 109, 111, 10, 0x24, 0x2f),
 		ctx.FreezeLayer("SabWalk", 0x0c),
-		ctx.ShowActor(actor),
-		ctx.PlaceActorPerspective(actor, 0x118, 0xf8),
-		ctx.EnableArea("S102_To103"),
+
+		// This is the exact original trigger point for the exit hotspot: only
+		// after the door-opening animation and Sabine's walk have completed.
 		loc23SetOriginal(ctx, loc23StateDoorOpen, 1),
+		ctx.EnableArea("S102_To103"),
 	)
 }
 
