@@ -146,6 +146,7 @@ func loc08Enter100(ctx *Context, from string) engine.Task {
 		tasks = append(tasks, loc08SetOriginal(ctx, loc08StateHarbour, 4))
 		if actor != "" {
 			tasks = append(tasks,
+				ctx.HideActor(actor),
 				ctx.ShowLayer("BoatReturns"),
 				ctx.PlayLayerFrames("BoatReturns", 0, 6),
 				ctx.PlaySFXVolume("Sfx_Paddling.wav", 50),
@@ -156,6 +157,7 @@ func loc08Enter100(ctx *Context, from string) engine.Task {
 				loc08SetOriginal(ctx, loc08StateBoatReturned, 1),
 				loc08ShowClickableLayer(ctx, "BoatBack"),
 				ctx.PlaceActorPerspective(actor, 0x12e, 0xe2),
+				ctx.ShowActor(actor),
 				ctx.WalkToFacingPerspective(actor, 0x12e, 0xe6, 0),
 			)
 		} else {

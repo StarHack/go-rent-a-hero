@@ -380,9 +380,7 @@ func (LOC24Controller) Enter(ctx *Context, scene, from string) engine.Task {
 	}
 	tasks = append(tasks,
 		loc24MakeClickables(ctx),
-		// S103_Instrumente is the virtual-projector hotspot. Keep it first in
-		// hit-test order so overlapping fight/table sprites cannot steal clicks.
-		loc24PrioritizeAreas(ctx, "S103_Instrumente"),
+		loc24PrioritizeAreas(ctx, "S103_Helm", "S103_Instrumente"),
 		ctx.RunAmbient(&loc24FightLoop{ctx: ctx, scene: ctx.session.scene}),
 		ctx.RunAmbient(&loc24Ambient{ctx: ctx, scene: ctx.session.scene}),
 	)
@@ -437,7 +435,8 @@ func (LOC24Controller) Click(ctx *Context, area string) engine.Task {
 			ctx.HideActor(actor),
 			ctx.HideLayer("S103_Helm"),
 			ctx.DisableArea("S103_Helm"),
-			ctx.PlayLayer("S103_RodTakesHelm"),
+			ctx.PlayLayerFrames("S103_RodTakesHelm", 0, -1),
+			ctx.HideLayer("S103_RodTakesHelm"),
 			ctx.AddItem(5),
 			loc24SetFightState(ctx, 3),
 			ctx.ShowActor(actor),
