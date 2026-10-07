@@ -37,6 +37,12 @@ jobs:
             artifact: rah-windows-amd64
             archive: rah-windows-amd64.zip
 
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            artifact: rah-linux-amd64
+            archive: rah-linux-amd64.tar.gz
+
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -68,6 +74,31 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_arch }}" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DSDL_SHARED=ON \
+            -DSDL_STATIC=OFF \
+            -DSDL_TESTS=OFF
+
+          cmake \
+            --build SDL/build \
+            --config Release \
+            --parallel
+
+          cmake \
+            --install SDL/build \
+            --config Release \
+            --prefix "$PWD/SDL/install"
+
+      - name: Build SDL on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config libasound2-dev libpulse-dev libaudio-dev libjack-dev libsndio-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev
+
+          cmake \
+            -S SDL \
+            -B SDL/build \
+            -DCMAKE_BUILD_TYPE=Release \
             -DSDL_SHARED=ON \
             -DSDL_STATIC=OFF \
             -DSDL_TESTS=OFF
@@ -132,6 +163,12 @@ jobs:
         run: |
           cp SDL/install/lib/libSDL3.dylib dist/libSDL3.dylib
 
+      - name: Copy SDL on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cp SDL/install/lib/libSDL3.so dist/libSDL3.so
+
       - name: Copy SDL on Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -148,6 +185,18 @@ jobs:
             rah \
             rahinstall \
             libSDL3.dylib \
+            config.ini
+
+      - name: Package Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          tar \
+            -C dist \
+            -czf "${{ matrix.archive }}" \
+            rah \
+            rahinstall \
+            libSDL3.so \
             config.ini
 
       - name: Package Windows
