@@ -357,3 +357,16 @@ func renderDebugGlyph(renderer *sdl.Renderer, x, y float32, glyph [8]byte) {
 		}
 	}
 }
+func (r *Renderer) DrawOverlayLayer(layer *engine.Layer, x int) error {
+	if layer == nil || layer.Source == nil {
+		return nil
+	}
+	zoom := layer.Zoom
+	if zoom == 0 {
+		zoom = 100
+	}
+	if layer.ColorKeyed {
+		return r.drawTopLeftKeyed(layer.Source, layer.Frame, x, layer.Y, zoom)
+	}
+	return r.drawTopLeft(layer.Source, layer.Frame, x, layer.Y, zoom)
+}

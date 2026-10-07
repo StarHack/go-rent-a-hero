@@ -10,9 +10,10 @@ type FakeEngine struct {
 
 // FakePlay records one Play call and its controllable handle.
 type FakePlay struct {
-	Sound    *Sound
-	Category Category
-	Handle   *FakeHandle
+	Sound      *Sound
+	Category   Category
+	BaseVolume float64
+	Handle     *FakeHandle
 }
 
 // NewFakeEngine returns a FakeEngine.
@@ -49,13 +50,24 @@ func (e *FakeEngine) play(sound *Sound, category Category, looping bool, volume 
 	if volume < 0 {
 		volume = 0
 	}
-	h := &FakeHandle{duration: sound.Duration(), looping: looping, volume: volume}
-	e.Plays = append(e.Plays, &FakePlay{Sound: sound, Category: category, Handle: h})
+	h := &FakeHandle{duration: sound.Duration(), looping: looping, volume: volume * e.Volume[category]}
+	e.Plays = append(e.Plays, &FakePlay{Sound: sound, Category: category, BaseVolume: volume, Handle: h})
 	return h
 }
 
 func (e *FakeEngine) SetCategoryVolume(category Category, volume float64) {
+	if volume < 0 {
+		volume = 0
+	}
+	if volume > 1 {
+		volume = 1
+	}
 	e.Volume[category] = volume
+	for _, p := range e.Plays {
+		if p.Category == category && p.Handle.IsPlaying() {
+			p.Handle.SetVolume(p.BaseVolume * volume)
+		}
+	}
 }
 
 func (e *FakeEngine) StopCategory(category Category) {

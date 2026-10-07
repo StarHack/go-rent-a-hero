@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/wok/rent-a-hero/internal/datapath"
 )
 
 const (
@@ -53,14 +51,15 @@ func newOriginalStateBlock() []byte {
 }
 
 func saveGameRootPath() (string, error) {
-	if configPath, err := datapath.Resolve("config.ini"); err == nil {
-		return filepath.Join(filepath.Dir(configPath), saveGameFileName), nil
-	}
-	cwd, err := os.Getwd()
+	exe, err := os.Executable()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(cwd, saveGameFileName), nil
+	dir := filepath.Join(filepath.Dir(exe), "savegames")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, saveGameFileName), nil
 }
 
 func encodeOriginalScene(scene string) (int32, error) {
@@ -264,6 +263,10 @@ func (s *Session) SaveGame() error {
 }
 
 func (s *Session) SaveGameTo(path string) error {
+	return s.SaveGameToNamed(path, "Game 1")
+}
+
+func (s *Session) SaveGameToNamed(path, nameText string) error {
 	if s.scene == nil {
 		return fmt.Errorf("game: cannot save without a loaded scene")
 	}
@@ -298,7 +301,7 @@ func (s *Session) SaveGameTo(path string) error {
 		return err
 	}
 	var name [saveGameNameSize]byte
-	copy(name[:], "Game 1")
+	copy(name[:], nameText)
 	if _, err := file.Write(name[:]); err != nil {
 		return err
 	}
@@ -411,6 +414,24 @@ func (s *Session) loadGameFrom(path string) error {
 	s.loadedSave = true
 	s.syncOriginalStateToFlags()
 	return nil
+}
+
+func (s *Session) LoadGameFrom(path string) error {
+	if err := s.loadGameFrom(path); err != nil {
+		return err
+	}
+	s.audioEngine.StopAll()
+	s.idx = s.initialIdx
+	s.controller = s.initialController
+	s.scene = nil
+	s.activeTask = nil
+	s.locked = false
+	s.ambientTasks = nil
+	s.walkEpoch = nil
+	s.currentSubtitle = ""
+	s.selectedItem = nil
+	s.done = false
+	return s.LoadInitialScene(s.state.Scene)
 }
 
 func (s *Session) autoLoadGame() {

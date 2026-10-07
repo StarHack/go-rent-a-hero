@@ -29,6 +29,7 @@ type OtoEngine struct {
 	// even runs.
 	active           []*oto.Player
 	activeCategories map[*oto.Player]Category
+	activeHandles    map[*oto.Player]*otoHandle
 }
 
 // NewOtoEngine creates an Oto context at sampleRate (e.g. 44100) and
@@ -44,7 +45,7 @@ func NewOtoEngine(sampleRate int) (*OtoEngine, error) {
 	}
 	<-ready
 
-	e := &OtoEngine{ctx: ctx, sampleRate: sampleRate, activeCategories: make(map[*oto.Player]Category)}
+	e := &OtoEngine{ctx: ctx, sampleRate: sampleRate, activeCategories: make(map[*oto.Player]Category), activeHandles: make(map[*oto.Player]*otoHandle)}
 	for i := range e.volume {
 		e.volume[i] = 1.0
 	}
@@ -98,6 +99,7 @@ func (e *OtoEngine) play(sound *Sound, category Category, loop bool, volume floa
 	e.reapFinishedPlayers()
 	e.active = append(e.active, player)
 	e.activeCategories[player] = category
+	e.activeHandles[player] = h
 
 	return h
 }
@@ -116,12 +118,23 @@ func (e *OtoEngine) reapFinishedPlayers() {
 			continue
 		}
 		delete(e.activeCategories, p)
+		delete(e.activeHandles, p)
 	}
 	e.active = kept
 }
 
 func (e *OtoEngine) SetCategoryVolume(category Category, volume float64) {
-	e.volume[category] = clamp01(volume)
+	volume = clamp01(volume)
+	e.volume[category] = volume
+	for player, activeCategory := range e.activeCategories {
+		if activeCategory != category {
+			continue
+		}
+		if h := e.activeHandles[player]; h != nil {
+			h.categoryVolume = volume
+			h.applyVolume()
+		}
+	}
 }
 
 func (e *OtoEngine) StopCategory(category Category) {
@@ -130,6 +143,7 @@ func (e *OtoEngine) StopCategory(category Category) {
 		if e.activeCategories[p] == category {
 			p.Pause()
 			delete(e.activeCategories, p)
+			delete(e.activeHandles, p)
 			continue
 		}
 		kept = append(kept, p)
@@ -147,11 +161,13 @@ func (e *OtoEngine) StopAll() {
 	}
 	e.active = e.active[:0]
 	clear(e.activeCategories)
+	clear(e.activeHandles)
 }
 
 func (e *OtoEngine) Close() error {
 	e.active = nil
 	clear(e.activeCategories)
+	clear(e.activeHandles)
 	return e.ctx.Suspend()
 }
 

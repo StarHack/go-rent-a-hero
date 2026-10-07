@@ -49,6 +49,8 @@ type Session struct {
 	done bool
 
 	initialLocation      int
+	initialIdx           *assets.Index
+	initialController    Controller
 	saveGamePath         string
 	loadedSave           bool
 	savedPlayerX         int
@@ -113,14 +115,49 @@ func newSession(idx *assets.Index, audioEngine audio.Engine, controller Controll
 		state: &engine.GameState{Location: location, Flags: map[string]int{
 			FlagCanalStoryFlag: 1,
 		}, OriginalState: newOriginalStateBlock()},
-		initialLocation: location,
-		saveGamePath:    strings.TrimSpace(saveGamePath),
+		initialLocation:   location,
+		initialIdx:        idx,
+		initialController: controller,
+		saveGamePath:      strings.TrimSpace(saveGamePath),
 	}
 	if loadSave {
 		s.autoLoadGame()
 	}
 	s.applyInventoryOverride()
 	return s
+}
+
+func (s *Session) ResetNewGame(sceneID string) error {
+	s.audioEngine.StopAll()
+	s.idx = s.initialIdx
+	s.controller = s.initialController
+	s.state = &engine.GameState{Location: s.initialLocation, Flags: map[string]int{
+		FlagCanalStoryFlag: 1,
+	}, OriginalState: newOriginalStateBlock()}
+	s.scene = nil
+	s.activeTask = nil
+	s.locked = false
+	s.musicHandle = nil
+	s.musicName = ""
+	s.musicLocation = 0
+	s.walkEpoch = nil
+	s.selectedItem = nil
+	s.currentSubtitle = ""
+	s.done = false
+	s.loadedSave = false
+	s.savedPlayerX = 0
+	s.savedPlayerY = 0
+	s.savedPlayerDirection = 0
+	s.haveSavedPlayer = false
+	s.savedFlash = 0
+	s.loc04Runtime = nil
+	s.ambientTasks = nil
+	s.localizationExt = ""
+	s.localizationDetected = false
+	s.areaTextDB = nil
+	s.applyInventoryOverride()
+	s.PrepareReturnHomeFirstEncounter()
+	return s.LoadInitialScene(sceneID)
 }
 
 func (s *Session) applyInventoryOverride() {
