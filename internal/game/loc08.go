@@ -133,10 +133,11 @@ func loc08Enter100(ctx *Context, from string) engine.Task {
 			tasks = append(tasks,
 				loc08SetLayerTransform(ctx, "SabWalk", 600, 151, 221, 44),
 				ctx.ShowLayer("SabWalk"),
-				engine.Parallel(
-					loc08TweenLayer(ctx, "SabWalk", 341, 149, 167, 50, 0x3c, true, true, true, true),
-					ctx.PlayLayerFrames("SabWalk", 0x23, 0x2f),
-				),
+				// Original S100 entry: mode 0x0D keeps SabWalk frames 0x24..0x2F
+				// cycling for the entire 0x3C-step position/scale transform. Playing
+				// the range once in parallel makes the layer finish animating early and
+				// visibly glide for the remainder of the movement.
+				loc08WalkTween(ctx, "SabWalk", 341, 149, 167, 50, 0x3c, 0x24, 0x2f),
 				ctx.HideLayer("SabWalk"),
 				loc08PoseSab100(ctx),
 			)
