@@ -23,6 +23,7 @@ jobs:
             cmake_arch: x86_64
             artifact: rah-darwin-amd64
             archive: rah-darwin-amd64.tar.gz
+            cgo_enabled: 0
 
           - os: macos-15
             goos: darwin
@@ -30,18 +31,21 @@ jobs:
             cmake_arch: arm64
             artifact: rah-darwin-arm64
             archive: rah-darwin-arm64.tar.gz
+            cgo_enabled: 0
 
           - os: windows-2025
             goos: windows
             goarch: amd64
             artifact: rah-windows-amd64
             archive: rah-windows-amd64.zip
+            cgo_enabled: 0
 
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
             artifact: rah-linux-amd64
             archive: rah-linux-amd64.tar.gz
+            cgo_enabled: 1
 
     runs-on: ${{ matrix.os }}
 
@@ -140,7 +144,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
+          CGO_ENABLED: ${{ matrix.cgo_enabled }}
         run: |
           mkdir -p dist
 
