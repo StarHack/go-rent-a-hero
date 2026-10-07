@@ -24,7 +24,7 @@ type isoNode struct {
 }
 
 type isoSource struct {
-	file       *os.File
+	file       io.Closer
 	reader     io.ReaderAt
 	size       int64
 	root       *isoNode
@@ -60,7 +60,7 @@ func openISOSource(name string) (sourceFS, error) {
 	return src, nil
 }
 
-func newISOSource(file *os.File, reader io.ReaderAt, size int64) (*isoSource, error) {
+func newISOSource(file io.Closer, reader io.ReaderAt, size int64) (*isoSource, error) {
 	src := &isoSource{
 		file:   file,
 		reader: reader,

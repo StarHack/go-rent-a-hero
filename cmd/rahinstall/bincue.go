@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -39,6 +40,51 @@ func isRawCDSync(data []byte) bool {
 	return true
 }
 
+func openCUESource(name string) (sourceFS, error) {
+	cue, err := os.ReadFile(name)
+	if err != nil {
+		return nil, err
+	}
+
+	imageName, ok := cueImageName(bytes.NewReader(cue))
+	if !ok {
+		return nil, fmt.Errorf("CUE contains no referenced image")
+	}
+
+	imagePath := filepath.Join(filepath.Dir(name), filepath.FromSlash(strings.ReplaceAll(imageName, "\\", "/")))
+	f, err := os.Open(imagePath)
+	if err != nil {
+		return nil, fmt.Errorf("open CUE image %q: %w", imageName, err)
+	}
+
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	src, err := openBINReaderWithCloser(f, info.Size(), imagePath, cue, f)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	return src, nil
+}
+
+func cueImageName(r io.Reader) (string, bool) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		fields := splitCUEFields(strings.TrimSpace(scanner.Text()))
+		if len(fields) >= 2 && strings.EqualFold(fields[0], "FILE") {
+			ext := strings.ToLower(filepath.Ext(fields[1]))
+			if ext == ".bin" || ext == ".img" {
+				return fields[1], true
+			}
+		}
+	}
+	return "", false
+}
+
 func openBINSource(name string) (sourceFS, error) {
 	f, err := os.Open(name)
 	if err != nil {
@@ -51,36 +97,50 @@ func openBINSource(name string) (sourceFS, error) {
 		return nil, err
 	}
 
-	trackSector, payloadOffset, err := detectBINLayout(name, f, info.Size())
+	src, err := openBINReaderWithCloser(f, info.Size(), name, nil, f)
 	if err != nil {
 		f.Close()
 		return nil, err
 	}
+	return src, nil
+}
 
-	raw := &rawCDReader{
-		reader:        f,
-		rawSize:       info.Size(),
-		sectorSize:    2352,
-		payloadOffset: payloadOffset,
-		trackSector:   trackSector,
+func openBINReader(reader io.ReaderAt, size int64, name string, cue []byte) (sourceFS, error) {
+	return openBINReaderWithCloser(reader, size, name, cue, nil)
+}
+
+func openBINReaderWithCloser(reader io.ReaderAt, size int64, name string, cue []byte, closer io.Closer) (sourceFS, error) {
+	trackSector, payloadOffset, err := detectBINLayoutReader(name, reader, size, cue)
+	if err != nil {
+		return nil, err
 	}
-
-	logicalSectors := info.Size()/2352 - trackSector
+	raw := &rawCDReader{reader: reader, rawSize: size, sectorSize: 2352, payloadOffset: payloadOffset, trackSector: trackSector}
+	logicalSectors := size/2352 - trackSector
 	if logicalSectors <= 16 {
-		f.Close()
 		return nil, fmt.Errorf("BIN data track is too small")
 	}
-
-	src, err := newISOSource(f, raw, logicalSectors*isoSectorSize)
+	src, err := newISOSource(closer, raw, logicalSectors*isoSectorSize)
 	if err != nil {
-		f.Close()
 		return nil, fmt.Errorf("BIN does not contain a supported ISO9660 data track: %w", err)
 	}
-
 	return src, nil
 }
 
 func detectBINLayout(name string, f *os.File, size int64) (int64, int64, error) {
+	return detectBINLayoutReader(name, f, size, nil)
+}
+
+func detectBINLayoutReader(name string, f io.ReaderAt, size int64, cue []byte) (int64, int64, error) {
+	if len(cue) > 0 {
+		if cueTrack, cueMode, ok := parseCUE(bytes.NewReader(cue), filepath.Base(name)); ok {
+			switch cueMode {
+			case "MODE1/2352":
+				return cueTrack, 16, nil
+			case "MODE2/2352":
+				return cueTrack, 24, nil
+			}
+		}
+	}
 	if cueTrack, cueMode, ok := readSiblingCUE(name); ok {
 		switch cueMode {
 		case "MODE1/2352":

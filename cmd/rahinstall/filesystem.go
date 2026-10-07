@@ -44,6 +44,10 @@ func openSource(name string) (sourceFS, error) {
 		return &dirSource{root: name}, nil
 	}
 
+	if strings.EqualFold(filepath.Ext(name), ".zip") {
+		return openZIPSource(name)
+	}
+
 	f, err := os.Open(name)
 	if err != nil {
 		return nil, err
@@ -61,8 +65,12 @@ func openSource(name string) (sourceFS, error) {
 		return openBINSource(name)
 	}
 
-	if strings.EqualFold(filepath.Ext(name), ".bin") {
+	ext := strings.ToLower(filepath.Ext(name))
+	if ext == ".bin" || ext == ".img" {
 		return openBINSource(name)
+	}
+	if ext == ".cue" {
+		return openCUESource(name)
 	}
 
 	return openISOSource(name)
