@@ -96,6 +96,28 @@ func loc24MakeClickables(ctx *Context) engine.Task {
 	return engine.Sequence(tasks...)
 }
 
+func loc24PrioritizeAreas(ctx *Context, ids ...string) engine.Task {
+	return engine.Immediate(func() {
+		if ctx.session.scene == nil || len(ids) == 0 {
+			return
+		}
+		wanted := make(map[string]bool, len(ids))
+		ordered := make([]string, 0, len(ctx.session.scene.AreaOrder))
+		for _, id := range ids {
+			if _, ok := ctx.session.scene.Areas[id]; ok && !wanted[id] {
+				wanted[id] = true
+				ordered = append(ordered, id)
+			}
+		}
+		for _, id := range ctx.session.scene.AreaOrder {
+			if !wanted[id] {
+				ordered = append(ordered, id)
+			}
+		}
+		ctx.session.scene.AreaOrder = ordered
+	})
+}
+
 func loc24HideFight(ctx *Context) engine.Task {
 	return engine.Sequence(
 		ctx.HideLayer("S103_SabAttack2"),
@@ -297,6 +319,9 @@ func loc24Arrival(ctx *Context, actor string) engine.Task {
 		ctx.PlayLayerFrames("S103_CapComes", 0, 9),
 		ctx.SetLayerZ("S103_CapComes", 0x73),
 		ctx.PlayLayerFrames("S103_CapComes", 10, -1),
+		// The original one-shot entrance tail hands off to CapCameTalk; it is
+		// not a persistent background pose underneath the talking captain.
+		ctx.HideLayer("S103_CapComes"),
 		ctx.SetActorDirection(actor, 4),
 		ctx.PlaySpeechBoundToLayer("S103_CapCameTalk", "103_CAP_01", "", 0, 0x2a),
 		loc08LoopLayer(ctx, "S103_SabDrawsSword"),
@@ -325,9 +350,6 @@ func (LOC24Controller) Enter(ctx *Context, scene, from string) engine.Task {
 		ctx.PlayMusic("Loc23_PirateShip.wav"),
 		ctx.ShowLayer("S103_Tisch"),
 		loc08LoopLayer(ctx, "Gen_SmallSteam"),
-		// The original does not assign event 4 to S103_To102 until the
-		// opening S103 sequence (CAP_01 / SAB_01 / first attack) has finished.
-		ctx.DisableArea("S103_To102"),
 	}
 	if !ctx.HasItem(0x18) {
 		tasks = append(tasks, ctx.ShowLayer("S103_Flasche"))
@@ -342,12 +364,6 @@ func (LOC24Controller) Enter(ctx *Context, scene, from string) engine.Task {
 			tasks = append(tasks, ctx.ShowActor(actor))
 		}
 	}
-	// Match the original event wiring: S103_To102 becomes clickable only
-	// after the initial arrival/dialogue sequence has completed. On a loaded
-	// save the intro is skipped, so this is reached immediately, just as in
-	// the original.
-	tasks = append(tasks, ctx.EnableArea("S103_To102"))
-
 	if loc24Original(ctx, loc24StateFightSpeed) != 0 {
 		tasks = append(tasks, engine.Immediate(func() {
 			for _, id := range []string{"S103_SabAttack2", "S103_SabDeckt1"} {
@@ -364,6 +380,9 @@ func (LOC24Controller) Enter(ctx *Context, scene, from string) engine.Task {
 	}
 	tasks = append(tasks,
 		loc24MakeClickables(ctx),
+		// S103_Instrumente is the virtual-projector hotspot. Keep it first in
+		// hit-test order so overlapping fight/table sprites cannot steal clicks.
+		loc24PrioritizeAreas(ctx, "S103_Instrumente"),
 		ctx.RunAmbient(&loc24FightLoop{ctx: ctx, scene: ctx.session.scene}),
 		ctx.RunAmbient(&loc24Ambient{ctx: ctx, scene: ctx.session.scene}),
 	)
